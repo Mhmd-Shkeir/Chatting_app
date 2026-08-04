@@ -39,48 +39,12 @@ Run this against any implemented feature before marking it done, whether reviewi
 - [ ] Manual testing checklist included at the end
 - [ ] Tested on two accounts/devices where the feature involves real-time sync
 
+## Performance
+
+- [ ] No unnecessary rebuilds
+- [ ] Firestore reads minimized
+- [ ] Images cached
+
 ## Sign-off
 
 - [ ] I ran it myself and it behaves as described, not just "looks right in the diff"
-
-
-
-
-# Review Checklist
-
-Before accepting a feature verify:
-
-Architecture
-
-- Repository Pattern respected
-- Riverpod used correctly
-- No Firebase inside UI
-
-Code Quality
-
-- No duplicated logic
-- Good naming
-- Strong typing
-- Reusable widgets
-
-UI
-
-- Loading state
-- Empty state
-- Error state
-
-Performance
-
-- No unnecessary rebuilds
-- Firestore reads minimized
-- Images cached
-
-Security
-
-- Firebase rules respected
-- No secrets exposed
-
-Testing
-
-- Manual tests completed
-- Feature behaves correctly

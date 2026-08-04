@@ -56,24 +56,4 @@ Copy this template and fill it in for each individual feature request. One featu
 
 ## Reminder to Claude
 
-Before writing code: explain the affected files and data flow, and confirm the plan. Return complete code only for files created or modified. End with a manual testing checklist.
-
-
-
-Implement ONLY the requested feature.
-
-Before writing code:
-
-1. Read the project documentation.
-2. Explain the data flow.
-3. List every affected file.
-4. Explain why each file changes.
-
-Wait for approval.
-
-After approval:
-
-- Generate complete code.
-- Do not modify unrelated files.
-- Follow the existing architecture.
-- Finish with a testing checklist.
+Before writing code: read the project documentation, explain the data flow, list every affected file and why it changes, and confirm the plan. Wait for approval before writing code. After approval, generate complete code only for files created or modified, do not touch unrelated files, follow the existing architecture, and finish with a manual testing checklist.

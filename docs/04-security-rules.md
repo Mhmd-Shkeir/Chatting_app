@@ -33,6 +33,12 @@ Users may NOT
 
 # Conversations
 
+Creating a conversation
+
+- A user may create a conversation document only if their own uid is included in `participants`.
+- `participants` must contain exactly two uids for a one-to-one conversation.
+- A user cannot create a conversation on behalf of two other users.
+
 Only conversation participants may
 
 - Read conversations

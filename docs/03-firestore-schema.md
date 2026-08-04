@@ -51,6 +51,12 @@ String
 
 User display name
 
+displayNameLower
+
+String
+
+Lowercase copy of displayName, used for prefix search (isGreaterThanOrEqualTo / isLessThan queries). Kept in sync whenever displayName changes.
+
 email
 
 String
@@ -279,9 +285,10 @@ Query
 
 users
 
-where displayName contains search text
+where displayNameLower >= query.toLowerCase()
+and displayNameLower < query.toLowerCase() + ''
 
-(Implemented using search strategy decided later.)
+Prefix match on displayNameLower (Firestore has no native text search). Query only runs once the user has typed at least one character.
 
 ---
 
