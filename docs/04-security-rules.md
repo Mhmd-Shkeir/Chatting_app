@@ -48,6 +48,10 @@ Only conversation participants may
 
 Non-participants cannot access private conversations.
 
+Reading a conversation that doesn't exist yet
+
+`getOrCreateConversation()` checks whether a conversation already exists before creating one. A naive rule of "auth.uid in resource.data.participants" throws instead of denying when the document doesn't exist yet, because `resource` is null — this blocked every first-time conversation until fixed. The `get` rule explicitly tolerates a non-existent document; `list` doesn't need the same guard since query results only ever contain documents that exist.
+
 ---
 
 # Messages
@@ -62,7 +66,9 @@ Maximum message length should be limited.
 
 ---
 
-# Storage
+# Storage (Post-MVP v1.1 — not active)
+
+Firebase Storage is not part of the MVP. These rules are drafted for when image/file sharing and profile pictures are implemented later, not enforced or deployed now.
 
 Only authenticated users may upload.
 
@@ -76,6 +82,12 @@ Allowed types
 Maximum file size should be limited.
 
 Uploads belong only to the uploader.
+
+---
+
+# Realtime Database (Presence)
+
+Realtime Database uses its own rules syntax (`database.rules.json`), separate from these Firestore rules. Not yet written — needed before Phase 4 (Presence & Receipts) ships. At minimum: a user may only write their own presence node, and any authenticated user may read presence data.
 
 ---
 

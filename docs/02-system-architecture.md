@@ -117,11 +117,9 @@ Infrastructure consists of:
 
 - Firebase Authentication
 - Cloud Firestore
-- Firebase Storage
-- Firebase Cloud Messaging
-- Cloud Functions
+- Firebase Realtime Database (Presence is part of the MVP, so this is active infrastructure, not optional)
 
-Realtime Database may be added later if Presence is implemented.
+Firebase Storage, Firebase Cloud Messaging, and Cloud Functions are not part of the MVP — see Post-MVP (v1.1) below.
 
 ---
 
@@ -312,42 +310,29 @@ Responsible for
 
 ---
 
-## Firebase Storage
-
-Responsible for
-
-- Profile pictures
-- Chat images
-
----
-
-## Firebase Cloud Messaging
-
-Responsible for
-
-- Push notifications
-
----
-
-## Cloud Functions
-
-Responsible only for
-
-- Secure push notification triggering
-
-No application business logic should exist inside Cloud Functions.
-
----
-
-## Realtime Database (Optional)
-
-Only if Presence is implemented.
+## Realtime Database
 
 Responsible for
 
 - Online status
 - Last seen
 - Presence
+
+Firestore has no `onDisconnect` equivalent, which is why presence uses Realtime Database instead of Firestore.
+
+---
+
+## Post-MVP (v1.1) — Not active infrastructure
+
+These are documented for continuity only. Nothing below is implemented, configured, or depended on during the MVP.
+
+### Firebase Storage
+
+Would be responsible for profile pictures and chat images. Requires the Blaze plan — out of reach while the project stays on Spark.
+
+### Firebase Cloud Messaging / Cloud Functions
+
+Push notifications move to a separate, self-hosted Node.js + Express service using the Firebase Admin SDK instead of a Cloud Function, specifically to avoid requiring Blaze. See `08-roadmap.md` for the architecture diagram. The `firebase_messaging` client package is already installed (added during Phase 2's dependency setup) but is not wired into any provider or screen yet — it stays dormant until this phase.
 
 ---
 

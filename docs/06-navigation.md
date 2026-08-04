@@ -174,7 +174,9 @@ Open Chat
 
 ---
 
-# Notification Flow
+# Notification Flow (Post-MVP v1.1 — not active)
+
+Documented for continuity only; not implemented until push notifications land per `08-roadmap.md`.
 
 Push Notification
 

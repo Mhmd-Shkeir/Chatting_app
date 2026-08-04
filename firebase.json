@@ -1,0 +1,25 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "lumina-chat-app-2026",
+          "appId": "1:400283659453:android:06f47412a9904751289bd4",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "lumina-chat-app-2026",
+          "configurations": {
+            "android": "1:400283659453:android:06f47412a9904751289bd4"
+          }
+        }
+      }
+    }
+  }
+}

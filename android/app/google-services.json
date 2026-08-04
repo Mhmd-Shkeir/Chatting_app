@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "400283659453",
+    "project_id": "lumina-chat-app-2026",
+    "storage_bucket": "lumina-chat-app-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:400283659453:android:06f47412a9904751289bd4",
+        "android_client_info": {
+          "package_name": "com.mohammadalishkeir.luminachat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCnRNFo90h6CGQJZlCcNAUndK4jXKoibV4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

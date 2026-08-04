@@ -40,7 +40,7 @@ This is NOT a clone of any existing application. The objective is to demonstrate
 ## Profile
 
 - Display name
-- Profile picture
+- Text-only profile (no profile picture in MVP)
 
 ## Users
 
@@ -50,8 +50,7 @@ This is NOT a clone of any existing application. The objective is to demonstrate
 ## Messaging
 
 - Real-time text messaging
-- Image messages
-- Read status
+- Read/Seen receipts
 - Message timestamps
 
 ## Conversations
@@ -60,10 +59,10 @@ This is NOT a clone of any existing application. The objective is to demonstrate
 - Latest message preview
 - Unread count
 
-## Notifications
+## Presence
 
-- Push notifications
-- Open correct chat from notification
+- Online/Offline status
+- Last seen
 
 ---
 
@@ -81,7 +80,7 @@ This is NOT a clone of any existing application. The objective is to demonstrate
 # Constraints
 
 - Flutter only
-- Firebase backend
+- Firebase backend (Spark / free plan only — no Storage, no Cloud Functions)
 - Android APK
 - Five-day implementation
 
@@ -89,7 +88,6 @@ This is NOT a clone of any existing application. The objective is to demonstrate
 
 # Out of Scope
 
-- Voice calls
 - Video calls
 - Stories
 - Channels
@@ -100,12 +98,25 @@ This is NOT a clone of any existing application. The objective is to demonstrate
 
 ---
 
+# Post-MVP (v1.1)
+
+Planned, but deliberately deferred until after the core MVP ships. No implementation, architecture, or roadmap work happens on these during the MVP.
+
+- Voice calls (WebRTC)
+- Push notifications — via a separate Node.js + Firebase Admin SDK service, not Cloud Functions. See `08-roadmap.md` for the architecture.
+- Image/File sharing
+- Profile pictures
+
+Firebase Storage and Cloud Functions are not part of the MVP as a direct consequence of this list — nothing in the MVP requires either.
+
+---
+
 # Success Criteria
 The project is complete when:
 
 - Two users can register and log in successfully.
+- A user can search for another registered user and start a conversation.
 - Two Android devices can exchange real-time text messages.
-- Image messages work correctly.
-- Push notifications open the correct conversation.
+- Read/seen receipts and online/offline presence update correctly.
 - The application builds as a signed Android APK.
 - Documentation and README are complete.
