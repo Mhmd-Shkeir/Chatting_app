@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../authentication/data/models/app_user.dart';
+import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../data/repositories/profile_repository.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
@@ -8,7 +9,9 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
 });
 
 final currentUserProfileProvider = StreamProvider<AppUser?>((ref) {
-  return ref.watch(profileRepositoryProvider).watchCurrentUser();
+  final uid = ref.watch(authStateChangesProvider).value?.uid;
+  if (uid == null) return const Stream.empty();
+  return ref.watch(profileRepositoryProvider).watchUser(uid);
 });
 
 class ProfileController extends AsyncNotifier<void> {

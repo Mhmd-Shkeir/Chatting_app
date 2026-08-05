@@ -11,10 +11,7 @@ class ProfileRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
-  Stream<AppUser?> watchCurrentUser() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value(null);
-
+  Stream<AppUser?> watchUser(String uid) {
     return _firestore.collection('users').doc(uid).snapshots().map(
           (doc) => doc.exists ? AppUser.fromFirestore(doc.data()!, doc.id) : null,
         );
