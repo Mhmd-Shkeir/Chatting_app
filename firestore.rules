@@ -33,6 +33,14 @@ service cloud.firestore {
         allow create: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
           && request.resource.data.senderId == request.auth.uid;
+
+        // Read receipts: only the recipient (never the original sender) may
+        // mark a message read, and only the status field may change — the
+        // message content itself stays immutable.
+        allow update: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
+          && request.auth.uid != resource.data.senderId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
       }
     }
   }

@@ -22,13 +22,43 @@ class MessageBubble extends StatelessWidget {
           color: isMine ? colorScheme.primary : colorScheme.surfaceContainer,
           borderRadius: BorderRadius.circular(18),
         ),
-        child: Text(
-          message.text,
-          style: TextStyle(
-            color: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message.text,
+              style: TextStyle(
+                color: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
+              ),
+            ),
+            if (isMine) ...[
+              const SizedBox(height: 2),
+              _ReadReceipt(status: message.status, onPrimary: colorScheme.onPrimary),
+            ],
+          ],
         ),
       ),
     );
+  }
+}
+
+class _ReadReceipt extends StatelessWidget {
+  const _ReadReceipt({required this.status, required this.onPrimary});
+
+  final MessageStatus status;
+  final Color onPrimary;
+
+  @override
+  Widget build(BuildContext context) {
+    if (status == MessageStatus.sending) {
+      return Icon(Icons.access_time, size: 14, color: onPrimary.withValues(alpha: 0.7));
+    }
+
+    final isRead = status == MessageStatus.read;
+    final icon = status == MessageStatus.sent ? Icons.done : Icons.done_all;
+    final color = isRead ? Colors.lightBlueAccent : onPrimary.withValues(alpha: 0.7);
+
+    return Icon(icon, size: 14, color: color);
   }
 }

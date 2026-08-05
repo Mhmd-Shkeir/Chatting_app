@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum MessageStatus { sending, sent, read }
+enum MessageStatus { sending, sent, delivered, read }
 
 class Message {
   const Message({
@@ -32,6 +32,8 @@ MessageStatus _statusFromString(String? value) {
   switch (value) {
     case 'read':
       return MessageStatus.read;
+    case 'delivered':
+      return MessageStatus.delivered;
     case 'sending':
       return MessageStatus.sending;
     default:

@@ -84,6 +84,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 if (messages.isEmpty) {
                   return const Center(child: Text('No messages yet. Say hello.'));
                 }
+                if (otherUid != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    ref.read(chatRepositoryProvider).markMessagesRead(
+                          conversationId: widget.conversationId,
+                          otherUid: otherUid,
+                        );
+                  });
+                }
                 return ListView.builder(
                   reverse: true,
                   padding: const EdgeInsets.all(12),

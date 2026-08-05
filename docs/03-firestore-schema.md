@@ -219,7 +219,7 @@ status
 
 String
 
-sending/sent/read
+sending/sent/delivered/read
 
 timestamp
 
@@ -357,9 +357,16 @@ sending
 
 sent
 
+delivered
+
 read
 
-No delivered state in v1.
+Progression is sent -> delivered -> read. "Delivered" is set the moment the
+recipient's client observes the conversation update (via the
+conversations stream, active for the whole session) — not the specific
+chat being open. "Read" is set only when the recipient actually opens
+that chat. Revised from the original "no delivered state in v1" once
+Phase 4 needed WhatsApp-style receipts.
 
 ---
 

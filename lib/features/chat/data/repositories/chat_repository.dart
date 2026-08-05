@@ -65,4 +65,58 @@ class ChatRepository {
       'unreadCounts.$myUid': 0,
     });
   }
+
+  /// Upgrades sent -> delivered for messages from [otherUid]. Called whenever
+  /// this client observes the conversation update at all (not just when the
+  /// chat screen is open), since "delivered" means the message reached this
+  /// device — reusing the conversations stream that's already active for the
+  /// whole session avoids standing up a separate background listener.
+  Future<void> markMessagesDelivered({
+    required String conversationId,
+    required String otherUid,
+  }) {
+    return _updateMessagesFrom(
+      conversationId: conversationId,
+      otherUid: otherUid,
+      matches: (status) => status == 'sent',
+      newStatus: 'delivered',
+    );
+  }
+
+  /// Upgrades sent/delivered -> read for messages from [otherUid]. Called
+  /// only when the recipient actually opens this specific chat.
+  Future<void> markMessagesRead({
+    required String conversationId,
+    required String otherUid,
+  }) {
+    return _updateMessagesFrom(
+      conversationId: conversationId,
+      otherUid: otherUid,
+      matches: (status) => status != 'read',
+      newStatus: 'read',
+    );
+  }
+
+  Future<void> _updateMessagesFrom({
+    required String conversationId,
+    required String otherUid,
+    required bool Function(String? status) matches,
+    required String newStatus,
+  }) async {
+    final snapshot = await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .where('senderId', isEqualTo: otherUid)
+        .get();
+
+    final pending = snapshot.docs.where((doc) => matches(doc.data()['status'] as String?));
+    if (pending.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final doc in pending) {
+      batch.update(doc.reference, {'status': newStatus});
+    }
+    await batch.commit();
+  }
 }
