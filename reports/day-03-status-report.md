@@ -6,7 +6,7 @@
 
 ## Summary
 
-Day 3 focused on presence and read receipts — the details that make a messaging app feel finished rather than just functional. Online/offline status and "last seen" are complete and verified live; read receipts are in progress. Two real bugs were caught and fixed during testing, and one build-performance issue (non-blocking) was diagnosed.
+Day 3 focused on presence and read receipts — the details that make a messaging app feel finished rather than just functional. Online/offline status and "last seen" are complete and verified live; read receipts are also complete and verified live. Two real bugs were caught and fixed during testing, and one build-performance issue (non-blocking) was diagnosed.
 
 ## Presence & Last Seen — Complete
 
@@ -23,9 +23,14 @@ Two real issues were caught during hands-on testing — not theoretical, actuall
 1. A conflict between Firebase's automatic startup configuration and our own could crash the app on launch under specific conditions. Fixed with the standard, documented handling for this exact case.
 2. Logging out wasn't correctly recording a user as offline — a timing issue where the "go offline" signal was being sent a moment too late to be accepted. Fixed by reordering so it happens at the right moment.
 
-## In Progress: Read Receipts
+## Read Receipts — Complete
 
-Message status (sent → read) was already modeled in the data layer on Day 2; the permission rule allowing a recipient to mark a message read is drafted but not yet deployed or built into the app. Continuing next session.
+- Three-state message status, WhatsApp-style: sent (single gray check) → delivered (double gray check) → read (double blue check)
+- "Delivered" fires the moment the recipient's device observes the conversation update, piggybacked on the conversations stream that's already running for the whole session — no extra background listener needed
+- "Read" fires only when the recipient actually opens that specific chat
+- The permission rule (recipient may update only the status field, never the sender) was drafted earlier and has now been deployed
+- The Firestore schema doc was updated to reflect the delivered state, which an earlier version of the doc had explicitly ruled out for v1 — updated deliberately once the spec required it
+- Verified live: status correctly transitions to double blue on opening the chat, with "last seen" still correct alongside it
 
 ## Build Performance — Diagnosed, Not Blocking
 
@@ -33,4 +38,4 @@ A recurring slow build (several minutes instead of seconds) was traced to a mism
 
 ## Status
 
-Presence and Last Seen are complete, verified, and committed. Read Receipts and Unread Badge verification are the next two items. No blockers.
+Presence & Last Seen and Read Receipts are both complete, verified, and committed. Unread Badge re-verification (untouched by Read Receipts as far as we know, but not yet re-checked) is the last item before Phase 4 closes. No blockers.
