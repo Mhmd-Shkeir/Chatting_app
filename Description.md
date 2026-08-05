@@ -1,0 +1,1 @@
+Lumina Chat is a modern Flutter chat application built with Firebase, featuring secure email authentication, real-time one-to-one messaging, user search, online/offline presence, and read receipts. The project follows Clean Architecture principles with Riverpod, GoRouter, and Firebase services while remaining fully compatible with the Firebase Spark (free) plan.
