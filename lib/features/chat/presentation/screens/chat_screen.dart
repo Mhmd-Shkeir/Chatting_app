@@ -109,21 +109,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _textController,
-                      decoration: const InputDecoration(hintText: 'Message'),
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(otherUid),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: _textController,
+                        minLines: 1,
+                        maxLines: 5,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          hintText: 'Message',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _send(otherUid),
+                      ),
                     ),
                   ),
-                  IconButton(
+                  const SizedBox(width: 8),
+                  IconButton.filled(
                     icon: sendState.isLoading
-                        ? const SizedBox(
+                        ? SizedBox(
                             height: 18,
                             width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
                           )
                         : const Icon(Icons.send),
                     onPressed: sendState.isLoading ? null : () => _send(otherUid),

@@ -36,17 +36,27 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final resultsAsync = ref.watch(userSearchResultsProvider(_query));
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: TextField(
-          controller: _controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Search by name',
-            border: InputBorder.none,
+        title: Container(
+          height: 44,
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(22),
           ),
-          onChanged: _onChanged,
+          child: TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'Search by name',
+              prefixIcon: Icon(Icons.search, size: 20),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(vertical: 10),
+            ),
+            onChanged: _onChanged,
+          ),
         ),
       ),
       body: resultsAsync.when(
@@ -54,23 +64,37 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
         error: (error, _) => Center(child: Text('Something went wrong: $error')),
         data: (users) {
           if (_query.trim().isEmpty) {
-            return const Center(child: Text('Start typing to find people'));
+            return _SearchMessage(
+              icon: Icons.person_search_outlined,
+              text: 'Start typing to find people',
+            );
           }
           if (users.isEmpty) {
-            return const Center(child: Text('No users found'));
+            return _SearchMessage(
+              icon: Icons.search_off_rounded,
+              text: 'No users found',
+            );
           }
-          return ListView.builder(
+          return ListView.separated(
             itemCount: users.length,
+            separatorBuilder: (context, index) => const Divider(height: 1, indent: 72),
             itemBuilder: (context, index) {
               final user = users[index];
               return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 leading: CircleAvatar(
+                  backgroundColor: colorScheme.primaryContainer,
+                  foregroundColor: colorScheme.onPrimaryContainer,
                   child: Text(
                     user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
-                title: Text(user.displayName),
-                subtitle: Text(user.email),
+                title: Text(user.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                  user.email,
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+                ),
                 onTap: () async {
                   final conversationId = await ref
                       .read(conversationRepositoryProvider)
@@ -86,6 +110,38 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _SearchMessage extends StatelessWidget {
+  const _SearchMessage({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: colorScheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }

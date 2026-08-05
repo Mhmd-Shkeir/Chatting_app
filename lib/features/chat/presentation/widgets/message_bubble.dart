@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../data/models/message.dart';
 
@@ -12,10 +13,13 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
+    final timestampColor =
+        (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(alpha: 0.6);
+
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.symmetric(vertical: 3),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
@@ -32,10 +36,21 @@ class MessageBubble extends StatelessWidget {
                 color: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
               ),
             ),
-            if (isMine) ...[
-              const SizedBox(height: 2),
-              _ReadReceipt(status: message.status, onPrimary: colorScheme.onPrimary),
-            ],
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (message.timestamp != null)
+                  Text(
+                    DateFormat.jm().format(message.timestamp!),
+                    style: TextStyle(fontSize: 11, color: timestampColor),
+                  ),
+                if (isMine) ...[
+                  const SizedBox(width: 4),
+                  _ReadReceipt(status: message.status, onPrimary: colorScheme.onPrimary),
+                ],
+              ],
+            ),
           ],
         ),
       ),

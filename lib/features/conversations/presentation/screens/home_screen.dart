@@ -17,15 +17,15 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.account_circle_outlined),
+          onPressed: () => context.push('/profile'),
+        ),
         title: const Text('Lumina Chat'),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => context.push('/search'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
           ),
         ],
       ),
@@ -36,8 +36,33 @@ class HomeScreen extends ConsumerWidget {
               error: (error, _) => Center(child: Text('Something went wrong: $error')),
               data: (conversations) {
                 if (conversations.isEmpty) {
-                  return const Center(
-                    child: Text('No conversations yet. Search for someone to start chatting.'),
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 48,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No conversations yet',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Search for someone to start chatting.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
 
@@ -60,7 +85,7 @@ class HomeScreen extends ConsumerWidget {
 
                 return ListView.separated(
                   itemCount: conversations.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  separatorBuilder: (context, index) => const Divider(height: 1, indent: 72),
                   itemBuilder: (context, index) {
                     final conversation = conversations[index];
                     return ConversationTile(

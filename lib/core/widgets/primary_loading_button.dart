@@ -15,6 +15,10 @@ class PrimaryLoadingButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FilledButton(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(52),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
       onPressed: isLoading ? null : onPressed,
       child: isLoading
           ? const SizedBox(

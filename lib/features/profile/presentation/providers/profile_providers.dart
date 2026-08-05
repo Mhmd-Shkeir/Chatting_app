@@ -1,0 +1,28 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../authentication/data/models/app_user.dart';
+import '../../data/repositories/profile_repository.dart';
+
+final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
+  return ProfileRepository();
+});
+
+final currentUserProfileProvider = StreamProvider<AppUser?>((ref) {
+  return ref.watch(profileRepositoryProvider).watchCurrentUser();
+});
+
+class ProfileController extends AsyncNotifier<void> {
+  @override
+  Future<void> build() async {}
+
+  Future<void> updateDisplayName(String displayName) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() {
+      return ref.read(profileRepositoryProvider).updateDisplayName(displayName);
+    });
+  }
+}
+
+final profileControllerProvider = AsyncNotifierProvider<ProfileController, void>(
+  ProfileController.new,
+);

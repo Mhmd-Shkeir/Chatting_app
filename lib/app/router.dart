@@ -8,6 +8,7 @@ import '../features/authentication/presentation/screens/login_screen.dart';
 import '../features/authentication/presentation/screens/register_screen.dart';
 import '../features/chat/presentation/screens/chat_screen.dart';
 import '../features/conversations/presentation/screens/home_screen.dart';
+import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/search/presentation/screens/user_search_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -42,6 +43,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
       GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
       GoRoute(path: '/search', builder: (context, state) => const UserSearchScreen()),
+      GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
       GoRoute(
         path: '/chat/:conversationId',
         builder: (context, state) => ChatScreen(
