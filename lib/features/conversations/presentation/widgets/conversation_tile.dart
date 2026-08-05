@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../authentication/presentation/providers/presence_providers.dart';
 import '../../data/models/conversation.dart';
 
-class ConversationTile extends StatelessWidget {
+class ConversationTile extends ConsumerWidget {
   const ConversationTile({
     required this.conversation,
     required this.myUid,
@@ -15,14 +17,35 @@ class ConversationTile extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final name = conversation.otherParticipantName(myUid);
     final unread = conversation.unreadCountFor(myUid);
+    final otherUid = conversation.otherParticipantId(myUid);
+    final isOnline = ref.watch(presenceStatusProvider(otherUid)).value?.isOnline ?? false;
 
     return ListTile(
       onTap: onTap,
-      leading: CircleAvatar(
-        child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
+          ),
+          if (isOnline)
+            Positioned(
+              right: -1,
+              bottom: -1,
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2),
+                ),
+              ),
+            ),
+        ],
       ),
       title: Text(name),
       subtitle: Text(

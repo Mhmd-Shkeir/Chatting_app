@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chatting_app_flu/app/app.dart';
 import 'package:chatting_app_flu/features/authentication/presentation/providers/auth_providers.dart';
+import 'package:chatting_app_flu/features/authentication/presentation/providers/presence_providers.dart';
 
 void main() {
   testWidgets('Shows the login screen when logged out', (tester) async {
@@ -14,6 +15,9 @@ void main() {
       ProviderScope(
         overrides: [
           authStateChangesProvider.overrideWith((ref) => Stream<User?>.value(null)),
+          // Avoid constructing a real PresenceRepository (touches
+          // FirebaseDatabase.instance eagerly), which isn't initialized in tests.
+          presenceTrackerProvider.overrideWith((ref) {}),
         ],
         child: const LuminaChatApp(),
       ),

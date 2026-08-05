@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/presence_formatter.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
+import '../../../authentication/presentation/providers/presence_providers.dart';
 import '../../../conversations/data/models/conversation.dart';
 import '../../../conversations/presentation/providers/conversation_providers.dart';
 import '../providers/chat_providers.dart';
@@ -54,9 +56,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final messagesAsync = ref.watch(messagesStreamProvider(widget.conversationId));
     final sendState = ref.watch(sendMessageControllerProvider);
+    final presence =
+        otherUid != null ? ref.watch(presenceStatusProvider(otherUid)).value : null;
 
     return Scaffold(
-      appBar: AppBar(title: Text(otherName)),
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(otherName),
+            if (presence != null)
+              Text(
+                presence.isOnline ? 'Online' : formatLastSeen(presence.lastSeen),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Expanded(

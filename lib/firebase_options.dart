@@ -58,5 +58,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '400283659453',
     projectId: 'lumina-chat-app-2026',
     storageBucket: 'lumina-chat-app-2026.firebasestorage.app',
+    databaseURL: 'https://lumina-chat-app-2026-default-rtdb.firebaseio.com',
   );
 }
