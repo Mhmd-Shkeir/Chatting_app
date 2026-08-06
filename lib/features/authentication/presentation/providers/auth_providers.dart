@@ -12,6 +12,12 @@ final authStateChangesProvider = StreamProvider<User?>((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges();
 });
 
+/// For anything that needs to react to emailVerified specifically —
+/// unlike authStateChangesProvider, this also emits after reload().
+final userChangesProvider = StreamProvider<User?>((ref) {
+  return ref.watch(authRepositoryProvider).userChanges();
+});
+
 final usernameAvailabilityProvider = FutureProvider.family<bool, String>((ref, username) {
   if (username.trim().isEmpty) return Future.value(false);
   return ref.read(authRepositoryProvider).isUsernameAvailable(username);
@@ -56,6 +62,25 @@ class AuthController extends AsyncNotifier<void> {
       await ref.read(presenceRepositoryProvider).stopTracking();
       await ref.read(authRepositoryProvider).logout();
     });
+  }
+
+  Future<void> resendVerificationEmail() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() {
+      return ref.read(authRepositoryProvider).sendEmailVerification();
+    });
+  }
+
+  /// Returns the up-to-date verified status so the Verify Email screen can
+  /// branch on it directly, while [state] still carries loading/error for
+  /// the rest of the UI.
+  Future<bool> checkEmailVerified() async {
+    state = const AsyncLoading();
+    var verified = false;
+    state = await AsyncValue.guard(() async {
+      verified = await ref.read(authRepositoryProvider).checkEmailVerified();
+    });
+    return verified;
   }
 }
 

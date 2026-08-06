@@ -13,6 +13,11 @@ class AuthRepository {
 
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
+  /// Unlike [authStateChanges], also emits when the signed-in user's own
+  /// profile changes (reload(), updateDisplayName(), etc.) — what the
+  /// router needs to reactively notice emailVerified flipping to true.
+  Stream<User?> userChanges() => _auth.userChanges();
+
   User? get currentUser => _auth.currentUser;
 
   Future<bool> isUsernameAvailable(String username) async {
@@ -77,6 +82,16 @@ class AuthRepository {
       await user.delete();
       rethrow;
     }
+
+    // Best-effort: the account and username are already committed at this
+    // point, so a failure here (e.g. rate limiting) shouldn't roll back an
+    // otherwise-successful registration — the Verify Email screen's
+    // "Resend verification email" button covers this case.
+    try {
+      await user.sendEmailVerification();
+    } catch (_) {
+      // Swallowed deliberately — see comment above.
+    }
   }
 
   Future<void> login({required String email, required String password}) {
@@ -87,4 +102,35 @@ class AuthRepository {
   }
 
   Future<void> logout() => _auth.signOut();
+
+  Future<void> sendEmailVerification() async {
+    await _auth.currentUser?.sendEmailVerification();
+  }
+
+  /// Reloads the current user from Firebase and returns their up-to-date
+  /// `emailVerified` status. `authStateChanges()` does not emit on its own
+  /// just because verification state flipped server-side, so callers must
+  /// explicitly reload and re-check rather than relying on the stream.
+  ///
+  /// Deliberately reads the result from userChanges() rather than
+  /// re-reading currentUser after reload(): on this platform, plain
+  /// currentUser kept returning a stale emailVerified within the same
+  /// session no matter how many times it was re-read (only a full app
+  /// restart picked up the change, which confirms the server-side data
+  /// was already correct — this was a client-side caching issue).
+  /// userChanges() is the stream Firebase documents as the one that's
+  /// guaranteed to emit the refreshed user after reload().
+  Future<bool> checkEmailVerified() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+
+    final updated = _auth.userChanges().first;
+    await user.reload();
+    final refreshedUser = await updated.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => _auth.currentUser,
+    );
+
+    return refreshedUser?.emailVerified ?? false;
+  }
 }
