@@ -14,6 +14,13 @@ final currentUserProfileProvider = StreamProvider<AppUser?>((ref) {
   return ref.watch(profileRepositoryProvider).watchUser(uid);
 });
 
+/// Live per-uid profile lookup, independent of the frozen `participantNames`
+/// snapshot stored on conversation docs — used only to render `@username`
+/// until conversation metadata is refactored to resolve fully live.
+final userProfileProvider = StreamProvider.family<AppUser?, String>((ref, uid) {
+  return ref.watch(profileRepositoryProvider).watchUser(uid);
+});
+
 class ProfileController extends AsyncNotifier<void> {
   @override
   Future<void> build() async {}
@@ -22,6 +29,13 @@ class ProfileController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() {
       return ref.read(profileRepositoryProvider).updateDisplayName(displayName);
+    });
+  }
+
+  Future<void> claimUsername(String username) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() {
+      return ref.read(profileRepositoryProvider).claimUsername(username);
     });
   }
 }

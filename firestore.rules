@@ -9,6 +9,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Uniqueness registry: the document ID *is* the (lowercased) username,
+    // so "create fails if it already exists" is what actually enforces
+    // uniqueness. Permanent once claimed — no update/delete, since changing
+    // usernames isn't a supported flow.
+    match /usernames/{username} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     match /conversations/{conversationId} {
       // `get` must tolerate a conversation that doesn't exist yet: getOrCreateConversation()
       // checks existence before creating, and resource.data is null for a doc that isn't

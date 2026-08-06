@@ -6,6 +6,7 @@ import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
 import '../../../conversations/data/models/conversation.dart';
 import '../../../conversations/presentation/providers/conversation_providers.dart';
+import '../../../profile/presentation/providers/profile_providers.dart';
 import '../providers/chat_providers.dart';
 import '../widgets/message_bubble.dart';
 
@@ -58,6 +59,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final sendState = ref.watch(sendMessageControllerProvider);
     final presence =
         otherUid != null ? ref.watch(presenceStatusProvider(otherUid)).value : null;
+    final otherUsername =
+        otherUid != null ? ref.watch(userProfileProvider(otherUid)).value?.username : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -65,7 +68,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(otherName),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(child: Text(otherName, overflow: TextOverflow.ellipsis)),
+                if (otherUsername != null && otherUsername.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      '@$otherUsername',
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                ],
+              ],
+            ),
             if (presence != null)
               Text(
                 presence.isOnline ? 'Online' : formatLastSeen(presence.lastSeen),

@@ -12,21 +12,44 @@ class UserSearchRepository {
   final FirebaseAuth _auth;
 
   Future<List<AppUser>> search(String query) async {
-    final trimmed = query.trim().toLowerCase();
+    final trimmed = query.trim();
     if (trimmed.isEmpty) return const [];
 
-    final snapshot = await _firestore
-        .collection('users')
-        .where('displayNameLower', isGreaterThanOrEqualTo: trimmed)
-        .where('displayNameLower', isLessThan: '$trimmed')
-        .limit(20)
-        .get();
+    final displayNameLower = trimmed.toLowerCase();
+    final usernameLower =
+        (trimmed.startsWith('@') ? trimmed.substring(1) : trimmed).toLowerCase();
+
+    final results = await Future.wait([
+      // '' sorts after every valid Unicode character, so this range
+      // matches every displayNameLower that starts with the query. The
+      // previous version omitted it, making the range [x, x) — mathematically
+      // empty, so this query has never actually returned a result.
+      _firestore
+          .collection('users')
+          .where('displayNameLower', isGreaterThanOrEqualTo: displayNameLower)
+          .where('displayNameLower', isLessThan: '$displayNameLower')
+          .limit(20)
+          .get(),
+      if (usernameLower.isNotEmpty)
+        _firestore
+            .collection('users')
+            .where('usernameLower', isEqualTo: usernameLower)
+            .limit(1)
+            .get(),
+    ]);
 
     final myUid = _auth.currentUser?.uid;
+    final seen = <String>{};
+    final users = <AppUser>[];
 
-    return snapshot.docs
-        .where((doc) => doc.id != myUid)
-        .map((doc) => AppUser.fromFirestore(doc.data(), doc.id))
-        .toList();
+    for (final snapshot in results) {
+      for (final doc in snapshot.docs) {
+        if (doc.id == myUid) continue;
+        if (!seen.add(doc.id)) continue;
+        users.add(AppUser.fromFirestore(doc.data(), doc.id));
+      }
+    }
+
+    return users;
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/conversation_timestamp_formatter.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
+import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../data/models/conversation.dart';
 
 class ConversationTile extends ConsumerWidget {
@@ -23,6 +24,7 @@ class ConversationTile extends ConsumerWidget {
     final unread = conversation.unreadCountFor(myUid);
     final otherUid = conversation.otherParticipantId(myUid);
     final isOnline = ref.watch(presenceStatusProvider(otherUid)).value?.isOnline ?? false;
+    final username = ref.watch(userProfileProvider(otherUid)).value?.username;
     final colorScheme = Theme.of(context).colorScheme;
     final hasUnread = unread > 0;
 
@@ -56,9 +58,26 @@ class ConversationTile extends ConsumerWidget {
             ),
         ],
       ),
-      title: Text(
-        name,
-        style: TextStyle(fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              name,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500),
+            ),
+          ),
+          if (username != null && username.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                '@$username',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ],
       ),
       subtitle: Text(
         conversation.lastMessage ?? 'Say hello',

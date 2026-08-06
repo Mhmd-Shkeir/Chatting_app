@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/firebase_error_mapper.dart';
+import '../../../../core/utils/username_validator.dart';
 import '../../../../core/widgets/auth_text_field_decoration.dart';
 import '../../../../core/widgets/error_banner.dart';
 import '../../../../core/widgets/primary_loading_button.dart';
@@ -18,17 +21,29 @@ class RegisterScreen extends ConsumerStatefulWidget {
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _autovalidate = false;
+  Timer? _usernameDebounce;
+  String _debouncedUsername = '';
 
   @override
   void dispose() {
+    _usernameDebounce?.cancel();
     _nameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onUsernameChanged(String value) {
+    _usernameDebounce?.cancel();
+    _usernameDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _debouncedUsername = value.trim());
+    });
   }
 
   Future<void> _submit() async {
@@ -39,7 +54,36 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text,
           displayName: _nameController.text.trim(),
+          username: _usernameController.text.trim(),
         );
+  }
+
+  Widget _usernameAvailability(ColorScheme colorScheme) {
+    final username = _debouncedUsername;
+    if (username.isEmpty || !usernamePattern.hasMatch(username)) {
+      return const SizedBox.shrink();
+    }
+
+    final availability = ref.watch(usernameAvailabilityProvider(username.toLowerCase()));
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 4),
+      child: availability.when(
+        loading: () => Text(
+          'Checking availability…',
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+        ),
+        error: (_, _) => const SizedBox.shrink(),
+        data: (isAvailable) => Text(
+          isAvailable ? '@$username is available' : '@$username is already taken',
+          style: TextStyle(
+            fontSize: 12,
+            color: isAvailable ? Colors.lightGreen : colorScheme.error,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -128,6 +172,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                     ? 'Enter a display name'
                                     : null,
                               ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _usernameController,
+                                enabled: !authState.isLoading,
+                                onChanged: _onUsernameChanged,
+                                decoration: authFieldDecoration(
+                                  context,
+                                  label: 'Username',
+                                  icon: Icons.alternate_email,
+                                ),
+                                validator: validateUsername,
+                              ),
+                              _usernameAvailability(colorScheme),
                               const SizedBox(height: 16),
                               TextFormField(
                                 controller: _emailController,

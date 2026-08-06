@@ -6,6 +6,8 @@ class AppUser {
     required this.displayName,
     required this.displayNameLower,
     required this.email,
+    this.username,
+    this.usernameLower,
     this.photoUrl,
     this.bio,
     this.createdAt,
@@ -17,11 +19,15 @@ class AppUser {
   final String displayName;
   final String displayNameLower;
   final String email;
+  final String? username;
+  final String? usernameLower;
   final String? photoUrl;
   final String? bio;
   final DateTime? createdAt;
   final DateTime? lastSeen;
   final bool isOnline;
+
+  bool get hasUsername => username != null && username!.isNotEmpty;
 
   factory AppUser.fromFirestore(Map<String, dynamic> data, String uid) {
     return AppUser(
@@ -29,6 +35,8 @@ class AppUser {
       displayName: data['displayName'] as String? ?? '',
       displayNameLower: data['displayNameLower'] as String? ?? '',
       email: data['email'] as String? ?? '',
+      username: data['username'] as String?,
+      usernameLower: data['usernameLower'] as String?,
       photoUrl: data['photoUrl'] as String?,
       bio: data['bio'] as String?,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),

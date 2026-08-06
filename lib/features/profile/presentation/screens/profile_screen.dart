@@ -70,6 +70,17 @@ class ProfileScreen extends ConsumerWidget {
                   textAlign: TextAlign.center,
                   style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
+                if (user.hasUsername) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '@${user.username}',
+                    textAlign: TextAlign.center,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   user.email,

@@ -50,7 +50,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
             controller: _controller,
             autofocus: true,
             decoration: const InputDecoration(
-              hintText: 'Search by name',
+              hintText: 'Search by name or @username',
               prefixIcon: Icon(Icons.search, size: 20),
               border: InputBorder.none,
               contentPadding: EdgeInsets.symmetric(vertical: 10),
@@ -91,9 +91,22 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
                   ),
                 ),
                 title: Text(user.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                  user.email,
-                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (user.hasUsername)
+                      Text(
+                        '@${user.username}',
+                        style: TextStyle(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    Text(
+                      user.email,
+                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
                 ),
                 onTap: () async {
                   final conversationId = await ref

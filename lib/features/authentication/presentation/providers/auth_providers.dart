@@ -12,6 +12,11 @@ final authStateChangesProvider = StreamProvider<User?>((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges();
 });
 
+final usernameAvailabilityProvider = FutureProvider.family<bool, String>((ref, username) {
+  if (username.trim().isEmpty) return Future.value(false);
+  return ref.read(authRepositoryProvider).isUsernameAvailable(username);
+});
+
 class AuthController extends AsyncNotifier<void> {
   @override
   Future<void> build() async {}
@@ -20,6 +25,7 @@ class AuthController extends AsyncNotifier<void> {
     required String email,
     required String password,
     required String displayName,
+    required String username,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() {
@@ -27,6 +33,7 @@ class AuthController extends AsyncNotifier<void> {
             email: email,
             password: password,
             displayName: displayName,
+            username: username,
           );
     });
   }
