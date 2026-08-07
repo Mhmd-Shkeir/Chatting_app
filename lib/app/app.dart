@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
+import '../core/utils/root_scaffold_messenger_key.dart';
 import '../features/authentication/presentation/providers/presence_providers.dart';
 import 'router.dart';
 
@@ -16,6 +17,7 @@ class LuminaChatApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Lumina Chat',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,

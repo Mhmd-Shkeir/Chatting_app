@@ -49,18 +49,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final myUid = ref.watch(authStateChangesProvider).value?.uid;
     final conversations = ref.watch(conversationsStreamProvider).value;
     final conversation = _findConversation(conversations);
-    final otherName = (myUid != null && conversation != null)
-        ? conversation.otherParticipantName(myUid)
-        : 'Chat';
     final otherUid =
         (myUid != null && conversation != null) ? conversation.otherParticipantId(myUid) : null;
+    final otherProfile = otherUid != null ? ref.watch(userProfileProvider(otherUid)).value : null;
+    // Same reasoning as ConversationTile: participantNames is a frozen
+    // snapshot that never learns about account deletion, so that has to
+    // come from the live per-uid lookup instead.
+    final isDeleted = otherProfile?.deleted ?? false;
+    final otherName = isDeleted
+        ? 'Deleted Account'
+        : (myUid != null && conversation != null)
+            ? conversation.otherParticipantName(myUid)
+            : 'Chat';
 
     final messagesAsync = ref.watch(messagesStreamProvider(widget.conversationId));
     final sendState = ref.watch(sendMessageControllerProvider);
-    final presence =
-        otherUid != null ? ref.watch(presenceStatusProvider(otherUid)).value : null;
-    final otherUsername =
-        otherUid != null ? ref.watch(userProfileProvider(otherUid)).value?.username : null;
+    // A deleted account must never be presence-listened-to at all, let
+    // alone shown as online or with a last-seen time.
+    final presence = (otherUid != null && !isDeleted)
+        ? ref.watch(presenceStatusProvider(otherUid)).value
+        : null;
+    final otherUsername = otherProfile?.username;
 
     return Scaffold(
       appBar: AppBar(

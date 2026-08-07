@@ -60,6 +60,11 @@ class PresenceRepository {
     });
   }
 
+  /// For account deletion — removes the node entirely rather than just
+  /// marking offline, so no stale presence data lingers for an account
+  /// that no longer exists.
+  Future<void> deletePresence(String uid) => _database.ref('presence/$uid').remove();
+
   Stream<PresenceStatus> watchPresence(String uid) {
     return _database.ref('presence/$uid').onValue.map((event) {
       final data = event.snapshot.value;

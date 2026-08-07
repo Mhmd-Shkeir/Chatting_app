@@ -13,6 +13,7 @@ class AppUser {
     this.createdAt,
     this.lastSeen,
     this.isOnline = false,
+    this.deleted = false,
   });
 
   final String uid;
@@ -26,6 +27,7 @@ class AppUser {
   final DateTime? createdAt;
   final DateTime? lastSeen;
   final bool isOnline;
+  final bool deleted;
 
   bool get hasUsername => username != null && username!.isNotEmpty;
 
@@ -42,6 +44,7 @@ class AppUser {
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       lastSeen: (data['lastSeen'] as Timestamp?)?.toDate(),
       isOnline: data['isOnline'] as bool? ?? false,
+      deleted: data['deleted'] as bool? ?? false,
     );
   }
 }

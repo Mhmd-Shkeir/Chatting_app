@@ -45,6 +45,7 @@ class UserSearchRepository {
     for (final snapshot in results) {
       for (final doc in snapshot.docs) {
         if (doc.id == myUid) continue;
+        if (doc.data()['deleted'] == true) continue;
         if (!seen.add(doc.id)) continue;
         users.add(AppUser.fromFirestore(doc.data(), doc.id));
       }

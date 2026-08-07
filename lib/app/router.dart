@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/utils/root_scaffold_messenger_key.dart';
 import '../core/widgets/splash_screen.dart';
 import '../features/authentication/presentation/providers/auth_providers.dart';
 import '../features/authentication/presentation/screens/login_screen.dart';
@@ -16,11 +19,80 @@ import '../features/search/presentation/screens/user_search_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _RouterRefreshNotifier();
+  // Guards the self-heal below against overlapping itself — e.g. Riverpod
+  // re-delivering a transition for the same tombstoned value while a
+  // previous attempt is still in flight.
+  var isFinishingAccountDeletion = false;
+
   ref.listen(authStateChangesProvider, (previous, next) {
     refreshNotifier.notify();
   });
   ref.listen(currentUserProfileProvider, (previous, next) {
     refreshNotifier.notify();
+
+    // A tombstoned doc for your OWN account means account deletion is
+    // either actively running right now, or got interrupted on a previous
+    // attempt after the Firestore write but before the Auth account itself
+    // was actually deleted (app killed mid-flow, dropped network, etc.) —
+    // there's no cross-system transaction tying those two steps together.
+    // This lives in ref.listen (fires once per actual new value) rather
+    // than inside redirect() (which GoRouter can invoke repeatedly while
+    // resolving a single navigation) — triggering side effects from inside
+    // redirect() previously corrupted the session badly enough to block
+    // every subsequent login until the app restarted.
+    final tombstonedUid = (next.value?.deleted ?? false) ? next.value?.uid : null;
+    if (tombstonedUid == null || isFinishingAccountDeletion) return;
+
+    // ProfileController.deleteAccount() sets its state to loading before
+    // it does anything else, including the reauthenticate() call that
+    // precedes the tombstone write — so seeing it still loading here means
+    // THIS session's own delete-account flow is the one that produced this
+    // tombstone and is already working through finishAccountDeletion()
+    // itself. Its local-cache echo reaches this listener almost instantly,
+    // long before that flow has gotten anywhere near actually deleting the
+    // Auth account, so stepping in here too would just race it.
+    if (ref.read(profileControllerProvider).isLoading) return;
+
+    isFinishingAccountDeletion = true;
+    unawaited(() async {
+      try {
+        // Getting here (own flow not loading) means this tombstone is
+        // left over from a previous session, or the active flow above
+        // already finished the Firestore side and moved on — either way,
+        // seeing our own tombstoned doc at all means we're still signed in
+        // as this exact uid right now, so "recently signed in" still holds
+        // in the common case. Finish the job instead of just signing out
+        // and leaving an orphaned-but-still-valid Auth account (same email
+        // + password) that would hit this same check forever on every
+        // future sign-in.
+        await finishAccountDeletion(ref, tombstonedUid);
+      } catch (_) {
+        // Couldn't finish — most likely genuinely offline, or the session
+        // is old enough that Firebase no longer considers it "recent"
+        // enough for delete() (a persisted sign-in can be days old even
+        // though authStateChanges() still reports it as valid — "recently
+        // signed in" is a narrower window than "currently signed in").
+        // Sign out so they're not left staring at a dead account;
+        // redirect() already pins them to /login while deleted is true
+        // regardless. A fresh sign-in re-satisfies the recent-login
+        // requirement, so this same check will succeed next time.
+        await ref.read(authRepositoryProvider).logout();
+        rootScaffoldMessengerKey.currentState
+          ?..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 5),
+              content: Text(
+                'This account could not be fully removed while offline. '
+                'You have been signed out.',
+              ),
+            ),
+          );
+      } finally {
+        isFinishingAccountDeletion = false;
+      }
+    }());
   });
   ref.listen(userChangesProvider, (previous, next) {
     refreshNotifier.notify();
@@ -51,6 +123,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       final profileState = ref.read(currentUserProfileProvider);
       if (!profileState.hasValue) {
         return path == '/splash' ? null : '/splash';
+      }
+
+      // Same tombstone case as above — the actual signOut() call happens
+      // in the ref.listen block near the top of this provider, not here;
+      // this just keeps them off every other route while that resolves.
+      if (profileState.value?.deleted ?? false) {
+        return path == '/login' ? null : '/login';
       }
 
       final hasUsername = profileState.value?.hasUsername ?? false;

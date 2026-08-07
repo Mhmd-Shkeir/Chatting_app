@@ -25,6 +25,13 @@ class ProfileScreen extends ConsumerWidget {
     }
   }
 
+  void _deleteAccount(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => const _DeleteAccountDialog(),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -125,6 +132,19 @@ class ProfileScreen extends ConsumerWidget {
                         : () => ref.read(authControllerProvider.notifier).logout(),
                   ),
                 ),
+                const SizedBox(height: 16),
+                Card(
+                  elevation: 0,
+                  color: colorScheme.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    leading: Icon(Icons.delete_forever_outlined, color: colorScheme.error),
+                    title: Text('Delete account', style: TextStyle(color: colorScheme.error)),
+                    onTap: () => _deleteAccount(context),
+                  ),
+                ),
               ],
             ),
           );
@@ -183,6 +203,128 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
             }
           },
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteAccountDialog extends ConsumerStatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  ConsumerState<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    await ref
+        .read(profileControllerProvider.notifier)
+        .deleteAccount(_passwordController.text);
+
+    if (!mounted) return;
+
+    final error = ref.read(profileControllerProvider).error;
+    if (error != null) {
+      // Stay open and show exactly why it failed — this used to pop
+      // immediately regardless of outcome, so a failed attempt (e.g. wrong
+      // password) looked identical to a successful one: dialog gone, no
+      // visible confirmation either way.
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = mapAuthError(error);
+      });
+      return;
+    }
+
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      title: const Text('Delete account'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This permanently deletes your account. This cannot be undone. '
+            'Your existing messages will remain visible to the people you '
+            "talked to, but your profile will show as \"Deleted Account\".",
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 16),
+          Form(
+            key: _formKey,
+            child: TextFormField(
+              controller: _passwordController,
+              autofocus: true,
+              enabled: !_isSubmitting,
+              obscureText: _obscurePassword,
+              decoration: authFieldDecoration(
+                context,
+                label: 'Confirm your password',
+                icon: Icons.lock_outline,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  ),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
+              ),
+              validator: (value) =>
+                  (value == null || value.isEmpty) ? 'Enter your password' : null,
+            ),
+          ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 8),
+            Text(_errorMessage!, style: TextStyle(color: colorScheme.error, fontSize: 13)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.error,
+            foregroundColor: colorScheme.onError,
+          ),
+          onPressed: _isSubmitting ? null : _submit,
+          child: _isSubmitting
+              ? SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.onError,
+                  ),
+                )
+              : const Text('Delete account'),
         ),
       ],
     );

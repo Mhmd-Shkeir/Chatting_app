@@ -20,11 +20,21 @@ class ConversationTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final name = conversation.otherParticipantName(myUid);
     final unread = conversation.unreadCountFor(myUid);
     final otherUid = conversation.otherParticipantId(myUid);
-    final isOnline = ref.watch(presenceStatusProvider(otherUid)).value?.isOnline ?? false;
-    final username = ref.watch(userProfileProvider(otherUid)).value?.username;
+    final otherProfile = ref.watch(userProfileProvider(otherUid)).value;
+    // participantNames is a frozen snapshot from when the conversation was
+    // created (see conversation_repository.dart) — it never learns that
+    // the other person deleted their account, so that has to come from
+    // the same live per-uid lookup already used for @username.
+    final isDeleted = otherProfile?.deleted ?? false;
+    final name = isDeleted ? 'Deleted Account' : conversation.otherParticipantName(myUid);
+    // A deleted account must never show as online — gated ahead of the
+    // watch itself, not just the rendering below, so a deleted account is
+    // never presence-listened-to in the first place.
+    final isOnline =
+        isDeleted ? false : ref.watch(presenceStatusProvider(otherUid)).value?.isOnline ?? false;
+    final username = otherProfile?.username;
     final colorScheme = Theme.of(context).colorScheme;
     final hasUnread = unread > 0;
 
