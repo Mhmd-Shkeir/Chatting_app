@@ -24,11 +24,31 @@ class PendingImageFiles {
   void remove(String messageId) => _files.remove(messageId);
 }
 
-final pendingImageFilesProvider = Provider<PendingImageFiles>((ref) => PendingImageFiles());
+final pendingImageFilesProvider = Provider<PendingImageFiles>(
+  (ref) => PendingImageFiles(),
+);
 
-final messagesStreamProvider = StreamProvider.family<List<Message>, String>((ref, conversationId) {
+final messagesStreamProvider = StreamProvider.family<List<Message>, String>((
+  ref,
+  conversationId,
+) {
   return ref.watch(chatRepositoryProvider).streamMessages(conversationId);
 });
+
+/// The message currently selected as a reply target for the compose bar,
+/// if any. Cleared automatically once the reply is sent.
+class ReplyingToNotifier extends Notifier<Message?> {
+  @override
+  Message? build() => null;
+
+  void set(Message? message) => state = message;
+
+  void clear() => state = null;
+}
+
+final replyingToProvider = NotifierProvider<ReplyingToNotifier, Message?>(
+  ReplyingToNotifier.new,
+);
 
 class SendMessageController extends AsyncNotifier<void> {
   @override
@@ -38,24 +58,29 @@ class SendMessageController extends AsyncNotifier<void> {
     required String conversationId,
     required String recipientId,
     required String text,
+    ReplyPreview? replyTo,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
     state = const AsyncLoading();
     state = await AsyncValue.guard(() {
-      return ref.read(chatRepositoryProvider).sendMessage(
+      return ref
+          .read(chatRepositoryProvider)
+          .sendMessage(
             conversationId: conversationId,
             recipientId: recipientId,
             text: trimmed,
+            replyTo: replyTo,
           );
     });
   }
 }
 
-final sendMessageControllerProvider = AsyncNotifierProvider<SendMessageController, void>(
-  SendMessageController.new,
-);
+final sendMessageControllerProvider =
+    AsyncNotifierProvider<SendMessageController, void>(
+      SendMessageController.new,
+    );
 
 class SendImageMessageController extends AsyncNotifier<void> {
   @override
@@ -65,12 +90,13 @@ class SendImageMessageController extends AsyncNotifier<void> {
     required String conversationId,
     required String recipientId,
     required File file,
+    ReplyPreview? replyTo,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      final messageId = await ref.read(chatRepositoryProvider).sendPendingImageMessage(
-            conversationId,
-          );
+      final messageId = await ref
+          .read(chatRepositoryProvider)
+          .sendPendingImageMessage(conversationId, replyTo: replyTo);
       ref.read(pendingImageFilesProvider).put(messageId, file);
       await _upload(
         conversationId: conversationId,
@@ -93,7 +119,9 @@ class SendImageMessageController extends AsyncNotifier<void> {
 
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      await ref.read(chatRepositoryProvider).retryImageMessage(
+      await ref
+          .read(chatRepositoryProvider)
+          .retryImageMessage(
             conversationId: conversationId,
             messageId: messageId,
           );
@@ -113,11 +141,16 @@ class SendImageMessageController extends AsyncNotifier<void> {
     required File file,
   }) async {
     try {
-      final url = await ref.read(imageKitRepositoryProvider).uploadImage(
+      final url = await ref
+          .read(imageKitRepositoryProvider)
+          .uploadImage(
             file,
-            fileName: 'chat_${conversationId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+            fileName:
+                'chat_${conversationId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
           );
-      await ref.read(chatRepositoryProvider).completeImageMessage(
+      await ref
+          .read(chatRepositoryProvider)
+          .completeImageMessage(
             conversationId: conversationId,
             messageId: messageId,
             recipientId: recipientId,
@@ -125,7 +158,9 @@ class SendImageMessageController extends AsyncNotifier<void> {
           );
       ref.read(pendingImageFilesProvider).remove(messageId);
     } catch (_) {
-      await ref.read(chatRepositoryProvider).failImageMessage(
+      await ref
+          .read(chatRepositoryProvider)
+          .failImageMessage(
             conversationId: conversationId,
             messageId: messageId,
           );
@@ -135,4 +170,6 @@ class SendImageMessageController extends AsyncNotifier<void> {
 }
 
 final sendImageMessageControllerProvider =
-    AsyncNotifierProvider<SendImageMessageController, void>(SendImageMessageController.new);
+    AsyncNotifierProvider<SendImageMessageController, void>(
+      SendImageMessageController.new,
+    );

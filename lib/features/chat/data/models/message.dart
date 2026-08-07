@@ -13,6 +13,7 @@ class Message {
     this.type = MessageType.text,
     this.imageUrl,
     this.timestamp,
+    this.replyTo,
   });
 
   final String id;
@@ -22,8 +23,10 @@ class Message {
   final MessageType type;
   final String? imageUrl;
   final DateTime? timestamp;
+  final ReplyPreview? replyTo;
 
   factory Message.fromFirestore(Map<String, dynamic> data, String id) {
+    final replyToData = data['replyTo'];
     return Message(
       id: id,
       senderId: data['senderId'] as String? ?? '',
@@ -32,6 +35,54 @@ class Message {
       type: _typeFromString(data['type'] as String?),
       imageUrl: data['imageUrl'] as String?,
       timestamp: (data['timestamp'] as Timestamp?)?.toDate(),
+      replyTo: replyToData is Map
+          ? ReplyPreview.fromMap(Map<String, dynamic>.from(replyToData))
+          : null,
+    );
+  }
+}
+
+/// A frozen snapshot of the message being replied to, stored inline on the
+/// reply so the preview renders without a second read — same tradeoff as
+/// `participantNames` on conversations. If the original message is later
+/// deleted/edited, this preview intentionally stays as it was at reply time.
+class ReplyPreview {
+  const ReplyPreview({
+    required this.messageId,
+    required this.senderId,
+    required this.text,
+    required this.type,
+  });
+
+  final String messageId;
+  final String senderId;
+  final String text;
+  final MessageType type;
+
+  String get previewLabel => type == MessageType.image ? '📷 Photo' : text;
+
+  factory ReplyPreview.fromMap(Map<String, dynamic> data) {
+    return ReplyPreview(
+      messageId: data['messageId'] as String? ?? '',
+      senderId: data['senderId'] as String? ?? '',
+      text: data['text'] as String? ?? '',
+      type: _typeFromString(data['type'] as String?),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'messageId': messageId,
+    'senderId': senderId,
+    'text': text,
+    'type': type == MessageType.image ? 'image' : 'text',
+  };
+
+  factory ReplyPreview.fromMessage(Message message) {
+    return ReplyPreview(
+      messageId: message.id,
+      senderId: message.senderId,
+      text: message.type == MessageType.image ? '' : message.text,
+      type: message.type,
     );
   }
 }

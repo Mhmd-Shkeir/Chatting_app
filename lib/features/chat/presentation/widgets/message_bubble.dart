@@ -8,6 +8,9 @@ import 'package:intl/intl.dart';
 import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
 import '../screens/image_viewer_screen.dart';
+import 'message_action_menu.dart';
+import 'reply_preview_strip.dart';
+import 'swipe_to_reply.dart';
 
 class MessageBubble extends ConsumerWidget {
   const MessageBubble({
@@ -15,6 +18,10 @@ class MessageBubble extends ConsumerWidget {
     required this.isMine,
     required this.conversationId,
     required this.recipientId,
+    required this.currentUserId,
+    required this.otherUserName,
+    this.onReplyTap,
+    this.isHighlighted = false,
     super.key,
   });
 
@@ -22,65 +29,123 @@ class MessageBubble extends ConsumerWidget {
   final bool isMine;
   final String conversationId;
   final String recipientId;
+  final String currentUserId;
+  final String otherUserName;
+  final ValueChanged<String>? onReplyTap;
+  final bool isHighlighted;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final isImage = message.type == MessageType.image;
+    final replyTo = message.replyTo;
 
     final timestampColor =
-        (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(alpha: 0.6);
+        (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(
+          alpha: 0.6,
+        );
 
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 3),
-        padding: isImage
-            ? const EdgeInsets.all(4)
-            : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: isMine ? colorScheme.primary : colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isImage)
-              _ImageContent(
-                message: message,
-                isMine: isMine,
-                conversationId: conversationId,
-                recipientId: recipientId,
-                ref: ref,
-              )
-            else
-              Text(
-                message.text,
-                style: TextStyle(
-                  color: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
+    final baseColor = isMine
+        ? colorScheme.primary
+        : colorScheme.surfaceContainer;
+    final bubbleColor = isHighlighted
+        ? Color.alphaBlend(
+            colorScheme.tertiary.withValues(alpha: 0.45),
+            baseColor,
+          )
+        : baseColor;
+
+    return SwipeToReply(
+      onReply: () => ref.read(replyingToProvider.notifier).set(message),
+      onLongPress: () => showMessageActionMenu(
+        context,
+        ref: ref,
+        message: message,
+        isMine: isMine,
+      ),
+      child: Align(
+        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          margin: const EdgeInsets.symmetric(vertical: 3),
+          padding: isImage
+              ? const EdgeInsets.all(4)
+              : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
+          ),
+          decoration: BoxDecoration(
+            color: bubbleColor,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (replyTo != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: ReplyPreviewStrip(
+                    senderLabel: replyTo.senderId == currentUserId
+                        ? 'You'
+                        : otherUserName,
+                    preview: replyTo.previewLabel,
+                    onTap: onReplyTap == null
+                        ? null
+                        : () => onReplyTap!(replyTo.messageId),
+                    backgroundColor:
+                        (isMine ? colorScheme.onPrimary : colorScheme.onSurface)
+                            .withValues(alpha: 0.08),
+                    accentColor: isMine
+                        ? colorScheme.onPrimary
+                        : colorScheme.primary,
+                    foregroundColor: isMine
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurface,
+                  ),
+                ),
+              if (isImage)
+                _ImageContent(
+                  message: message,
+                  isMine: isMine,
+                  conversationId: conversationId,
+                  recipientId: recipientId,
+                  ref: ref,
+                )
+              else
+                Text(
+                  message.text,
+                  style: TextStyle(
+                    color: isMine
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurface,
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Padding(
+                padding: isImage
+                    ? const EdgeInsets.only(right: 4)
+                    : EdgeInsets.zero,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (message.timestamp != null)
+                      Text(
+                        DateFormat.jm().format(message.timestamp!),
+                        style: TextStyle(fontSize: 11, color: timestampColor),
+                      ),
+                    if (isMine) ...[
+                      const SizedBox(width: 4),
+                      _ReadReceipt(
+                        status: message.status,
+                        onPrimary: colorScheme.onPrimary,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            const SizedBox(height: 4),
-            Padding(
-              padding: isImage ? const EdgeInsets.only(right: 4) : EdgeInsets.zero,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (message.timestamp != null)
-                    Text(
-                      DateFormat.jm().format(message.timestamp!),
-                      style: TextStyle(fontSize: 11, color: timestampColor),
-                    ),
-                  if (isMine) ...[
-                    const SizedBox(width: 4),
-                    _ReadReceipt(status: message.status, onPrimary: colorScheme.onPrimary),
-                  ],
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -112,11 +177,13 @@ class _ImageContent extends StatelessWidget {
     if (message.status == MessageStatus.failed) {
       return GestureDetector(
         onTap: isMine
-            ? () => ref.read(sendImageMessageControllerProvider.notifier).retry(
-                  conversationId: conversationId,
-                  recipientId: recipientId,
-                  messageId: message.id,
-                )
+            ? () => ref
+                  .read(sendImageMessageControllerProvider.notifier)
+                  .retry(
+                    conversationId: conversationId,
+                    recipientId: recipientId,
+                    messageId: message.id,
+                  )
             : null,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -128,7 +195,10 @@ class _ImageContent extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 if (localFile != null)
-                  Opacity(opacity: 0.4, child: Image.file(localFile, fit: BoxFit.cover)),
+                  Opacity(
+                    opacity: 0.4,
+                    child: Image.file(localFile, fit: BoxFit.cover),
+                  ),
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -137,7 +207,10 @@ class _ImageContent extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         'Tap to retry',
-                        style: TextStyle(color: colorScheme.onErrorContainer, fontSize: 12),
+                        style: TextStyle(
+                          color: colorScheme.onErrorContainer,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -154,8 +227,10 @@ class _ImageContent extends StatelessWidget {
     return GestureDetector(
       onTap: imageUrl != null
           ? () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => ImageViewerScreen(imageUrl: imageUrl)),
-              )
+              MaterialPageRoute(
+                builder: (_) => ImageViewerScreen(imageUrl: imageUrl),
+              ),
+            )
           : null,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -178,7 +253,9 @@ class _ImageContent extends StatelessWidget {
               if (message.status == MessageStatus.sending)
                 const ColoredBox(
                   color: Colors.black26,
-                  child: Center(child: CircularProgressIndicator(color: Colors.white)),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
                 ),
             ],
           ),
@@ -204,15 +281,25 @@ class _ReadReceipt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (status == MessageStatus.failed) {
-      return Icon(Icons.error_outline, size: 14, color: Theme.of(context).colorScheme.error);
+      return Icon(
+        Icons.error_outline,
+        size: 14,
+        color: Theme.of(context).colorScheme.error,
+      );
     }
     if (status == MessageStatus.sending) {
-      return Icon(Icons.access_time, size: 14, color: onPrimary.withValues(alpha: 0.7));
+      return Icon(
+        Icons.access_time,
+        size: 14,
+        color: onPrimary.withValues(alpha: 0.7),
+      );
     }
 
     final isRead = status == MessageStatus.read;
     final icon = status == MessageStatus.sent ? Icons.done : Icons.done_all;
-    final color = isRead ? Colors.lightBlueAccent : onPrimary.withValues(alpha: 0.7);
+    final color = isRead
+        ? Colors.lightBlueAccent
+        : onPrimary.withValues(alpha: 0.7);
 
     return Icon(icon, size: 14, color: color);
   }

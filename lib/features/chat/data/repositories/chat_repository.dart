@@ -5,8 +5,8 @@ import '../models/message.dart';
 
 class ChatRepository {
   ChatRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -33,9 +33,12 @@ class ChatRepository {
     required String conversationId,
     required String recipientId,
     required String text,
+    ReplyPreview? replyTo,
   }) async {
     final senderId = _auth.currentUser!.uid;
-    final conversationRef = _firestore.collection('conversations').doc(conversationId);
+    final conversationRef = _firestore
+        .collection('conversations')
+        .doc(conversationId);
     final messageRef = conversationRef.collection('messages').doc();
 
     final batch = _firestore.batch();
@@ -46,6 +49,7 @@ class ChatRepository {
       'text': text,
       'status': 'sent',
       'timestamp': FieldValue.serverTimestamp(),
+      if (replyTo != null) 'replyTo': replyTo.toMap(),
     });
 
     batch.update(conversationRef, {
@@ -65,10 +69,16 @@ class ChatRepository {
   /// in flight, rather than making everyone wait for the whole round trip.
   /// Returns the new message id so the caller can complete or fail it once
   /// the upload settles.
-  Future<String> sendPendingImageMessage(String conversationId) async {
+  Future<String> sendPendingImageMessage(
+    String conversationId, {
+    ReplyPreview? replyTo,
+  }) async {
     final senderId = _auth.currentUser!.uid;
-    final messageRef =
-        _firestore.collection('conversations').doc(conversationId).collection('messages').doc();
+    final messageRef = _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc();
 
     await messageRef.set({
       'id': messageRef.id,
@@ -78,6 +88,7 @@ class ChatRepository {
       'imageUrl': null,
       'status': 'sending',
       'timestamp': FieldValue.serverTimestamp(),
+      if (replyTo != null) 'replyTo': replyTo.toMap(),
     });
 
     return messageRef.id;
@@ -94,7 +105,9 @@ class ChatRepository {
     required String imageUrl,
   }) async {
     final senderId = _auth.currentUser!.uid;
-    final conversationRef = _firestore.collection('conversations').doc(conversationId);
+    final conversationRef = _firestore
+        .collection('conversations')
+        .doc(conversationId);
     final messageRef = conversationRef.collection('messages').doc(messageId);
 
     final batch = _firestore.batch();
@@ -191,7 +204,9 @@ class ChatRepository {
         .where('senderId', isEqualTo: otherUid)
         .get();
 
-    final pending = snapshot.docs.where((doc) => matches(doc.data()['status'] as String?));
+    final pending = snapshot.docs.where(
+      (doc) => matches(doc.data()['status'] as String?),
+    );
     if (pending.isEmpty) return;
 
     final batch = _firestore.batch();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -12,8 +13,10 @@ import '../../../authentication/presentation/providers/presence_providers.dart';
 import '../../../conversations/data/models/conversation.dart';
 import '../../../conversations/presentation/providers/conversation_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
+import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/reply_preview_strip.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({required this.conversationId, super.key});
@@ -26,19 +29,84 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _textController = TextEditingController();
+  final _listController = ScrollController();
+  // Keyed per message id so a tap on a reply preview can scroll straight
+  // to the original bubble when it's already built (the common case —
+  // most replies point at something nearby).
+  final _messageKeys = <String, GlobalKey>{};
+  String? _highlightedMessageId;
+  Timer? _highlightTimer;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(
-      () => ref.read(chatRepositoryProvider).markConversationRead(widget.conversationId),
+      () => ref
+          .read(chatRepositoryProvider)
+          .markConversationRead(widget.conversationId),
     );
   }
 
   @override
   void dispose() {
     _textController.dispose();
+    _listController.dispose();
+    _highlightTimer?.cancel();
     super.dispose();
+  }
+
+  GlobalKey _keyFor(String messageId) =>
+      _messageKeys.putIfAbsent(messageId, () => GlobalKey());
+
+  // Rough average bubble height used only to jump near a message that
+  // isn't built yet (too far outside the list's cache window) so it gets
+  // laid out — [_scrollToMessage] then fine-tunes onto its exact position.
+  static const _estimatedItemExtent = 80.0;
+
+  void _scrollToMessage(String messageId, List<Message> messages) {
+    final builtContext = _messageKeys[messageId]?.currentContext;
+    if (builtContext != null) {
+      _settleOnMessage(builtContext, messageId);
+      return;
+    }
+
+    final index = messages.indexWhere((m) => m.id == messageId);
+    if (index == -1 || !_listController.hasClients) return;
+
+    final estimatedOffset = (index * _estimatedItemExtent).clamp(
+      0.0,
+      _listController.position.maxScrollExtent,
+    );
+    _listController.jumpTo(estimatedOffset);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _messageKeys[messageId]?.currentContext;
+      if (context != null) {
+        _settleOnMessage(context, messageId);
+      } else {
+        // Estimate landed close but not exact — still flag the highlight
+        // rather than leaving the user without any feedback.
+        _flagHighlighted(messageId);
+      }
+    });
+  }
+
+  void _settleOnMessage(BuildContext context, String messageId) {
+    Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      alignment: 0.5,
+    );
+    _flagHighlighted(messageId);
+  }
+
+  void _flagHighlighted(String messageId) {
+    _highlightTimer?.cancel();
+    setState(() => _highlightedMessageId = messageId);
+    _highlightTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) setState(() => _highlightedMessageId = null);
+    });
   }
 
   Conversation? _findConversation(List<Conversation>? conversations) {
@@ -54,9 +122,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final myUid = ref.watch(authStateChangesProvider).value?.uid;
     final conversations = ref.watch(conversationsStreamProvider).value;
     final conversation = _findConversation(conversations);
-    final otherUid =
-        (myUid != null && conversation != null) ? conversation.otherParticipantId(myUid) : null;
-    final otherProfile = otherUid != null ? ref.watch(userProfileProvider(otherUid)).value : null;
+    final otherUid = (myUid != null && conversation != null)
+        ? conversation.otherParticipantId(myUid)
+        : null;
+    final otherProfile = otherUid != null
+        ? ref.watch(userProfileProvider(otherUid)).value
+        : null;
     // Same reasoning as ConversationTile: participantNames is a frozen
     // snapshot that never learns about account deletion, so that has to
     // come from the live per-uid lookup instead.
@@ -64,11 +135,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final otherName = isDeleted
         ? 'Deleted Account'
         : (myUid != null && conversation != null)
-            ? conversation.otherParticipantName(myUid)
-            : 'Chat';
+        ? conversation.otherParticipantName(myUid)
+        : 'Chat';
 
-    final messagesAsync = ref.watch(messagesStreamProvider(widget.conversationId));
+    final messagesAsync = ref.watch(
+      messagesStreamProvider(widget.conversationId),
+    );
     final sendState = ref.watch(sendMessageControllerProvider);
+    final replyingTo = ref.watch(replyingToProvider);
     // A deleted account must never be presence-listened-to at all, let
     // alone shown as online or with a last-seen time.
     final presence = (otherUid != null && !isDeleted)
@@ -80,7 +154,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            UserAvatar(photoUrl: otherProfile?.photoUrl, displayName: otherName, radius: 18),
+            UserAvatar(
+              photoUrl: otherProfile?.photoUrl,
+              displayName: otherName,
+              radius: 18,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -90,17 +168,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Flexible(child: Text(otherName, overflow: TextOverflow.ellipsis)),
-                      if (otherUsername != null && otherUsername.isNotEmpty) ...[
+                      Flexible(
+                        child: Text(otherName, overflow: TextOverflow.ellipsis),
+                      ),
+                      if (otherUsername != null &&
+                          otherUsername.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
                             '@$otherUsername',
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                           ),
                         ),
                       ],
@@ -108,7 +191,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                   if (presence != null)
                     Text(
-                      presence.isOnline ? 'Online' : formatLastSeen(presence.lastSeen),
+                      presence.isOnline
+                          ? 'Online'
+                          : formatLastSeen(presence.lastSeen),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                 ],
@@ -122,32 +207,51 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Expanded(
             child: messagesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(child: Text('Something went wrong: $error')),
+              error: (error, _) =>
+                  Center(child: Text('Something went wrong: $error')),
               data: (messages) {
                 if (messages.isEmpty) {
-                  return const Center(child: Text('No messages yet. Say hello.'));
+                  return const Center(
+                    child: Text('No messages yet. Say hello.'),
+                  );
                 }
                 if (otherUid != null) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    ref.read(chatRepositoryProvider).markMessagesRead(
+                    ref
+                        .read(chatRepositoryProvider)
+                        .markMessagesRead(
                           conversationId: widget.conversationId,
                           otherUid: otherUid,
                         );
                   });
                 }
-                return ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return MessageBubble(
-                      message: message,
-                      isMine: message.senderId == myUid,
-                      conversationId: widget.conversationId,
-                      recipientId: otherUid ?? '',
-                    );
-                  },
+                return Scrollbar(
+                  controller: _listController,
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    controller: _listController,
+                    reverse: true,
+                    padding: const EdgeInsets.all(12),
+                    // Wider than the default cache window so a jump-to a
+                    // message that isn't built yet (see _scrollToMessage)
+                    // lands close enough for its bubble to already exist.
+                    cacheExtent: 2000,
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      final message = messages[index];
+                      return MessageBubble(
+                        key: _keyFor(message.id),
+                        message: message,
+                        isMine: message.senderId == myUid,
+                        conversationId: widget.conversationId,
+                        recipientId: otherUid ?? '',
+                        currentUserId: myUid ?? '',
+                        otherUserName: otherName,
+                        onReplyTap: (id) => _scrollToMessage(id, messages),
+                        isHighlighted: message.id == _highlightedMessageId,
+                      );
+                    },
+                  ),
                 );
               },
             ),
@@ -156,47 +260,77 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.image_outlined),
-                    onPressed: otherUid == null ? null : () => _sendImage(otherUid),
-                  ),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: TextField(
-                        controller: _textController,
-                        minLines: 1,
-                        maxLines: 5,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: const InputDecoration(
-                          hintText: 'Message',
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _send(otherUid),
+                  if (replyingTo != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: ReplyPreviewStrip(
+                        senderLabel: replyingTo.senderId == myUid
+                            ? 'You'
+                            : otherName,
+                        preview: ReplyPreview.fromMessage(
+                          replyingTo,
+                        ).previewLabel,
+                        onCancel: () =>
+                            ref.read(replyingToProvider.notifier).clear(),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    icon: sendState.isLoading
-                        ? SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Theme.of(context).colorScheme.onPrimary,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.image_outlined),
+                        onPressed: otherUid == null
+                            ? null
+                            : () => _sendImage(otherUid),
+                      ),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: TextField(
+                            controller: _textController,
+                            minLines: 1,
+                            maxLines: 5,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: const InputDecoration(
+                              hintText: 'Message',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
                             ),
-                          )
-                        : const Icon(Icons.send),
-                    onPressed: sendState.isLoading ? null : () => _send(otherUid),
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _send(otherUid),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        icon: sendState.isLoading
+                            ? SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
+                                ),
+                              )
+                            : const Icon(Icons.send),
+                        onPressed: sendState.isLoading
+                            ? null
+                            : () => _send(otherUid),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -210,11 +344,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _send(String? recipientId) async {
     if (recipientId == null) return;
     final text = _textController.text;
+    final replyingTo = ref.read(replyingToProvider);
     _textController.clear();
-    await ref.read(sendMessageControllerProvider.notifier).send(
+    ref.read(replyingToProvider.notifier).clear();
+    await ref
+        .read(sendMessageControllerProvider.notifier)
+        .send(
           conversationId: widget.conversationId,
           recipientId: recipientId,
           text: text,
+          replyTo: replyingTo == null
+              ? null
+              : ReplyPreview.fromMessage(replyingTo),
         );
   }
 
@@ -226,17 +367,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (action == null || !mounted) return;
 
     final picked = await ImagePicker().pickImage(
-      source: action == PhotoSourceAction.camera ? ImageSource.camera : ImageSource.gallery,
+      source: action == PhotoSourceAction.camera
+          ? ImageSource.camera
+          : ImageSource.gallery,
       maxWidth: 1600,
       maxHeight: 1600,
       imageQuality: 80,
     );
     if (picked == null || !mounted) return;
 
-    await ref.read(sendImageMessageControllerProvider.notifier).send(
+    final replyingTo = ref.read(replyingToProvider);
+    ref.read(replyingToProvider.notifier).clear();
+    await ref
+        .read(sendImageMessageControllerProvider.notifier)
+        .send(
           conversationId: widget.conversationId,
           recipientId: recipientId,
           file: File(picked.path),
+          replyTo: replyingTo == null
+              ? null
+              : ReplyPreview.fromMessage(replyingTo),
         );
   }
 }
