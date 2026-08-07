@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../conversations/presentation/providers/conversation_providers.dart';
 import '../providers/user_search_providers.dart';
 
@@ -82,14 +83,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
               final user = users[index];
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                leading: CircleAvatar(
-                  backgroundColor: colorScheme.primaryContainer,
-                  foregroundColor: colorScheme.onPrimaryContainer,
-                  child: Text(
-                    user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
+                leading: UserAvatar(photoUrl: user.photoUrl, displayName: user.displayName),
                 title: Text(user.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

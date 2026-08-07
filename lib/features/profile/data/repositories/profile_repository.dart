@@ -30,6 +30,15 @@ class ProfileRepository {
     });
   }
 
+  /// [photoUrl] is an ImageKit CDN URL, or null to reset to the default
+  /// initials avatar (see UserAvatar).
+  Future<void> updatePhotoUrl(String? photoUrl) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    await _firestore.collection('users').doc(user.uid).update({'photoUrl': photoUrl});
+  }
+
   /// Firebase requires a recent sign-in before it will allow deleting the
   /// account — this re-proves identity with their current password so
   /// AuthRepository.deleteAccount() doesn't throw requires-recent-login.

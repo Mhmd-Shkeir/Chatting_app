@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../chat/presentation/providers/chat_providers.dart';
+import '../../../profile/presentation/providers/profile_providers.dart';
 import '../providers/conversation_providers.dart';
 import '../widgets/conversation_tile.dart';
 
@@ -14,11 +16,16 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final myUid = ref.watch(authStateChangesProvider).value?.uid;
     final conversationsAsync = ref.watch(conversationsStreamProvider);
+    final myProfile = ref.watch(currentUserProfileProvider).value;
 
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.account_circle_outlined),
+          icon: UserAvatar(
+            photoUrl: myProfile?.photoUrl,
+            displayName: myProfile?.displayName ?? '',
+            radius: 16,
+          ),
           onPressed: () => context.push('/profile'),
         ),
         title: const Text('Lumina Chat'),

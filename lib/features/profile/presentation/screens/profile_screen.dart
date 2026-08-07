@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/utils/firebase_error_mapper.dart';
 import '../../../../core/widgets/auth_text_field_decoration.dart';
 import '../../../../core/widgets/error_banner.dart';
+import '../../../../core/widgets/photo_source_sheet.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../providers/profile_providers.dart';
 
@@ -32,12 +35,41 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _changePhoto(BuildContext context, WidgetRef ref, {required bool hasPhoto}) async {
+    final action = await showModalBottomSheet<PhotoSourceAction>(
+      context: context,
+      builder: (context) => PhotoSourceSheet(showRemove: hasPhoto),
+    );
+    if (action == null || !context.mounted) return;
+
+    final controller = ref.read(profileControllerProvider.notifier);
+    if (action == PhotoSourceAction.remove) {
+      await controller.removeProfilePhoto();
+    } else {
+      final picked = await ImagePicker().pickImage(
+        source: action == PhotoSourceAction.camera ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+      );
+      if (picked == null || !context.mounted) return;
+      await controller.updateProfilePhoto(picked);
+    }
+
+    if (!context.mounted) return;
+    final error = ref.read(profileControllerProvider).error;
+    if (error != null) {
+      showErrorSnackBar(context, mapAuthError(error));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final profileAsync = ref.watch(currentUserProfileProvider);
     final authState = ref.watch(authControllerProvider);
+    final profileState = ref.watch(profileControllerProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
@@ -53,22 +85,43 @@ class ProfileScreen extends ConsumerWidget {
               children: [
                 const SizedBox(height: 8),
                 Center(
-                  child: Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
-                        style: textTheme.headlineMedium?.copyWith(
-                          color: colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w700,
+                  child: Stack(
+                    children: [
+                      UserAvatar(photoUrl: user.photoUrl, displayName: user.displayName, radius: 48),
+                      if (profileState.isLoading)
+                        Positioned.fill(
+                          child: CircleAvatar(
+                            radius: 48,
+                            backgroundColor: Colors.black45,
+                            child: SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: colorScheme.onPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: GestureDetector(
+                          onTap: profileState.isLoading
+                              ? null
+                              : () => _changePhoto(context, ref, hasPhoto: user.photoUrl != null),
+                          child: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: colorScheme.primary,
+                            child: Icon(
+                              Icons.camera_alt_outlined,
+                              size: 16,
+                              color: colorScheme.onPrimary,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),

@@ -1,12 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../authentication/data/models/app_user.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
+import '../../data/repositories/image_kit_repository.dart';
 import '../../data/repositories/profile_repository.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
   return ProfileRepository();
+});
+
+final imageKitRepositoryProvider = Provider<ImageKitRepository>((ref) {
+  return ImageKitRepository();
 });
 
 final currentUserProfileProvider = StreamProvider<AppUser?>((ref) {
@@ -116,6 +124,21 @@ class ProfileController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() {
       return ref.read(profileRepositoryProvider).claimUsername(username);
+    });
+  }
+
+  Future<void> updateProfilePhoto(XFile file) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final url = await ref.read(imageKitRepositoryProvider).uploadImage(File(file.path));
+      await ref.read(profileRepositoryProvider).updatePhotoUrl(url);
+    });
+  }
+
+  Future<void> removeProfilePhoto() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() {
+      return ref.read(profileRepositoryProvider).updatePhotoUrl(null);
     });
   }
 

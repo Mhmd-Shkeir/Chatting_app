@@ -45,13 +45,28 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
           && request.resource.data.senderId == request.auth.uid;
 
-        // Read receipts: only the recipient (never the original sender) may
-        // mark a message read, and only the status field may change — the
-        // message content itself stays immutable.
+        // Two distinct people are allowed to update a message after it's
+        // created, for two distinct reasons — message content itself (text,
+        // senderId, timestamp) stays immutable in both cases:
+        //   1. The recipient (never the sender) marking read receipts —
+        //      status only.
+        //   2. The sender finishing their own pending image upload — status
+        //      and imageUrl only, and only while the message is still
+        //      mid-flight (status still 'sending' or a previously failed
+        //      'failed' attempt being retried) — once a status of 'sent' is
+        //      written, this same rule can no longer match for that sender,
+        //      since resource.data.status is neither 'sending' nor 'failed'
+        //      anymore, so a completed image message can't be rewritten
+        //      later either.
         allow update: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
-          && request.auth.uid != resource.data.senderId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+          && (
+            (request.auth.uid != resource.data.senderId
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+            || (request.auth.uid == resource.data.senderId
+              && resource.data.status in ['sending', 'failed']
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'imageUrl']))
+          );
       }
     }
   }

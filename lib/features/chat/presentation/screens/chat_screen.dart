@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/utils/presence_formatter.dart';
+import '../../../../core/widgets/photo_source_sheet.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
 import '../../../conversations/data/models/conversation.dart';
@@ -73,34 +78,42 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+        title: Row(
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(child: Text(otherName, overflow: TextOverflow.ellipsis)),
-                if (otherUsername != null && otherUsername.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      '@$otherUsername',
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
+            UserAvatar(photoUrl: otherProfile?.photoUrl, displayName: otherName, radius: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: Text(otherName, overflow: TextOverflow.ellipsis)),
+                      if (otherUsername != null && otherUsername.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '@$otherUsername',
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
+                  if (presence != null)
+                    Text(
+                      presence.isOnline ? 'Online' : formatLastSeen(presence.lastSeen),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                 ],
-              ],
-            ),
-            if (presence != null)
-              Text(
-                presence.isOnline ? 'Online' : formatLastSeen(presence.lastSeen),
-                style: Theme.of(context).textTheme.bodySmall,
               ),
+            ),
           ],
         ),
       ),
@@ -128,7 +141,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
-                    return MessageBubble(message: message, isMine: message.senderId == myUid);
+                    return MessageBubble(
+                      message: message,
+                      isMine: message.senderId == myUid,
+                      conversationId: widget.conversationId,
+                      recipientId: otherUid ?? '',
+                    );
                   },
                 );
               },
@@ -141,6 +159,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.image_outlined),
+                    onPressed: otherUid == null ? null : () => _sendImage(otherUid),
+                  ),
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -193,6 +215,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           conversationId: widget.conversationId,
           recipientId: recipientId,
           text: text,
+        );
+  }
+
+  Future<void> _sendImage(String recipientId) async {
+    final action = await showModalBottomSheet<PhotoSourceAction>(
+      context: context,
+      builder: (context) => const PhotoSourceSheet(),
+    );
+    if (action == null || !mounted) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: action == PhotoSourceAction.camera ? ImageSource.camera : ImageSource.gallery,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 80,
+    );
+    if (picked == null || !mounted) return;
+
+    await ref.read(sendImageMessageControllerProvider.notifier).send(
+          conversationId: widget.conversationId,
+          recipientId: recipientId,
+          file: File(picked.path),
         );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/conversation_timestamp_formatter.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../data/models/conversation.dart';
@@ -44,14 +45,7 @@ class ConversationTile extends ConsumerWidget {
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
-          CircleAvatar(
-            backgroundColor: colorScheme.primaryContainer,
-            foregroundColor: colorScheme.onPrimaryContainer,
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
+          UserAvatar(photoUrl: otherProfile?.photoUrl, displayName: name),
           if (isOnline)
             Positioned(
               right: -1,

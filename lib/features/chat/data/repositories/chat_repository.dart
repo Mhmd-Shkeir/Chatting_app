@@ -59,6 +59,87 @@ class ChatRepository {
     await batch.commit();
   }
 
+  /// Creates a pending image-message doc immediately (status: sending, no
+  /// imageUrl yet) so it appears live for both participants — including the
+  /// recipient, via the same real-time listener — while the upload is still
+  /// in flight, rather than making everyone wait for the whole round trip.
+  /// Returns the new message id so the caller can complete or fail it once
+  /// the upload settles.
+  Future<String> sendPendingImageMessage(String conversationId) async {
+    final senderId = _auth.currentUser!.uid;
+    final messageRef =
+        _firestore.collection('conversations').doc(conversationId).collection('messages').doc();
+
+    await messageRef.set({
+      'id': messageRef.id,
+      'senderId': senderId,
+      'text': '',
+      'type': 'image',
+      'imageUrl': null,
+      'status': 'sending',
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    return messageRef.id;
+  }
+
+  /// Finishes a pending image message once its upload succeeds: fills in
+  /// the real URL, flips status to sent, and updates the conversation
+  /// preview — mirroring what [sendMessage] does for text in one batch,
+  /// just as a second write here since the upload sits in between the two.
+  Future<void> completeImageMessage({
+    required String conversationId,
+    required String messageId,
+    required String recipientId,
+    required String imageUrl,
+  }) async {
+    final senderId = _auth.currentUser!.uid;
+    final conversationRef = _firestore.collection('conversations').doc(conversationId);
+    final messageRef = conversationRef.collection('messages').doc(messageId);
+
+    final batch = _firestore.batch();
+    batch.update(messageRef, {'imageUrl': imageUrl, 'status': 'sent'});
+    batch.update(conversationRef, {
+      'lastMessage': 'Photo',
+      'lastMessageSenderId': senderId,
+      'lastMessageTimestamp': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'unreadCounts.$recipientId': FieldValue.increment(1),
+    });
+    await batch.commit();
+  }
+
+  /// Marks a pending (or previously failed, on a retry that failed again)
+  /// image message as failed, so the sender's own bubble can offer a retry
+  /// instead of spinning forever.
+  Future<void> failImageMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'status': 'failed'});
+  }
+
+  /// Puts a failed image message back into the sending state for a retry
+  /// attempt — a separate step from actually re-uploading, so the bubble
+  /// can show the spinner again immediately rather than waiting on the
+  /// upload's first byte.
+  Future<void> retryImageMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'status': 'sending'});
+  }
+
   Future<void> markConversationRead(String conversationId) async {
     final myUid = _auth.currentUser!.uid;
     await _firestore.collection('conversations').doc(conversationId).update({

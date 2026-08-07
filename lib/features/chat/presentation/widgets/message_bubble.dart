@@ -1,17 +1,32 @@
+import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/models/message.dart';
+import '../providers/chat_providers.dart';
+import '../screens/image_viewer_screen.dart';
 
-class MessageBubble extends StatelessWidget {
-  const MessageBubble({required this.message, required this.isMine, super.key});
+class MessageBubble extends ConsumerWidget {
+  const MessageBubble({
+    required this.message,
+    required this.isMine,
+    required this.conversationId,
+    required this.recipientId,
+    super.key,
+  });
 
   final Message message;
   final bool isMine;
+  final String conversationId;
+  final String recipientId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isImage = message.type == MessageType.image;
 
     final timestampColor =
         (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(alpha: 0.6);
@@ -20,7 +35,9 @@ class MessageBubble extends StatelessWidget {
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: isImage
+            ? const EdgeInsets.all(4)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         decoration: BoxDecoration(
           color: isMine ? colorScheme.primary : colorScheme.surfaceContainer,
@@ -30,31 +47,151 @@ class MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              message.text,
-              style: TextStyle(
-                color: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
+            if (isImage)
+              _ImageContent(
+                message: message,
+                isMine: isMine,
+                conversationId: conversationId,
+                recipientId: recipientId,
+                ref: ref,
+              )
+            else
+              Text(
+                message.text,
+                style: TextStyle(
+                  color: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
+                ),
               ),
-            ),
             const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (message.timestamp != null)
-                  Text(
-                    DateFormat.jm().format(message.timestamp!),
-                    style: TextStyle(fontSize: 11, color: timestampColor),
-                  ),
-                if (isMine) ...[
-                  const SizedBox(width: 4),
-                  _ReadReceipt(status: message.status, onPrimary: colorScheme.onPrimary),
+            Padding(
+              padding: isImage ? const EdgeInsets.only(right: 4) : EdgeInsets.zero,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message.timestamp != null)
+                    Text(
+                      DateFormat.jm().format(message.timestamp!),
+                      style: TextStyle(fontSize: 11, color: timestampColor),
+                    ),
+                  if (isMine) ...[
+                    const SizedBox(width: 4),
+                    _ReadReceipt(status: message.status, onPrimary: colorScheme.onPrimary),
+                  ],
                 ],
-              ],
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+class _ImageContent extends StatelessWidget {
+  const _ImageContent({
+    required this.message,
+    required this.isMine,
+    required this.conversationId,
+    required this.recipientId,
+    required this.ref,
+  });
+
+  final Message message;
+  final bool isMine;
+  final String conversationId;
+  final String recipientId;
+  final WidgetRef ref;
+
+  static const double _size = 220;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final localFile = ref.watch(pendingImageFilesProvider).get(message.id);
+
+    if (message.status == MessageStatus.failed) {
+      return GestureDetector(
+        onTap: isMine
+            ? () => ref.read(sendImageMessageControllerProvider.notifier).retry(
+                  conversationId: conversationId,
+                  recipientId: recipientId,
+                  messageId: message.id,
+                )
+            : null,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: _size,
+            height: _size,
+            color: colorScheme.errorContainer,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (localFile != null)
+                  Opacity(opacity: 0.4, child: Image.file(localFile, fit: BoxFit.cover)),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh, color: colorScheme.onErrorContainer),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tap to retry',
+                        style: TextStyle(color: colorScheme.onErrorContainer, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final imageUrl = message.imageUrl;
+
+    return GestureDetector(
+      onTap: imageUrl != null
+          ? () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => ImageViewerScreen(imageUrl: imageUrl)),
+              )
+          : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: _size,
+          height: _size,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (imageUrl != null)
+                CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => _pendingPreview(localFile),
+                  errorWidget: (context, url, error) =>
+                      const Icon(Icons.broken_image_outlined, size: 32),
+                )
+              else
+                _pendingPreview(localFile),
+              if (message.status == MessageStatus.sending)
+                const ColoredBox(
+                  color: Colors.black26,
+                  child: Center(child: CircularProgressIndicator(color: Colors.white)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingPreview(File? localFile) {
+    if (localFile != null) {
+      return Image.file(localFile, fit: BoxFit.cover);
+    }
+    return const ColoredBox(color: Colors.black26);
   }
 }
 
@@ -66,6 +203,9 @@ class _ReadReceipt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (status == MessageStatus.failed) {
+      return Icon(Icons.error_outline, size: 14, color: Theme.of(context).colorScheme.error);
+    }
     if (status == MessageStatus.sending) {
       return Icon(Icons.access_time, size: 14, color: onPrimary.withValues(alpha: 0.7));
     }
