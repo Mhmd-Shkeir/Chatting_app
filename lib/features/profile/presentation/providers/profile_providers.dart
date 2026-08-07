@@ -41,6 +41,26 @@ final userProfileProvider = StreamProvider.family<AppUser?, String>((ref, uid) {
 Future<void> finishAccountDeletion(Ref ref, String uid) async {
   final authRepository = ref.read(authRepositoryProvider);
 
+  // [uid] can be stale by the time this actually runs. Concretely:
+  // router.dart's self-heal reads it off a currentUserProfileProvider
+  // snapshot, and Riverpod's own "isReloading" behavior means a provider
+  // that rebuilds because a watched dependency changed (here,
+  // authStateChangesProvider flipping to a different uid, or to null)
+  // still exposes the *previous* emission via `.value` until the new
+  // stream produces something — which, for the empty stream used when
+  // nobody's signed in, never happens. So the self-heal can still see this
+  // account's tombstoned doc for a brief window after its own deletion has
+  // already fully finished and a completely different account has since
+  // signed in on this device. Refusing to proceed unless [uid] still
+  // matches whoever is actually signed in right now is what stops that
+  // stale read from tearing down (via the presence cleanup below, which
+  // acts on this device's single shared PresenceRepository and whatever
+  // uid it's currently tracking, not specifically on [uid]) or deleting
+  // (via authRepository.deleteAccount's own matching check, kept as a
+  // second layer in case the signed-in user changes again during the
+  // awaits below) that unrelated, live session instead.
+  if (authRepository.currentUser?.uid != uid) return;
+
   // Best-effort, deliberately: the account and its data are already
   // committed to being deleted at this point, so a leftover presence node
   // (a cosmetic online/offline dot) must never be able to block the Auth
@@ -71,7 +91,7 @@ Future<void> finishAccountDeletion(Ref ref, String uid) async {
   Object? lastError;
   for (var attempt = 0; attempt < 3; attempt++) {
     try {
-      await authRepository.deleteAccount().timeout(const Duration(seconds: 10));
+      await authRepository.deleteAccount(uid).timeout(const Duration(seconds: 10));
       return;
     } catch (error) {
       lastError = error;

@@ -103,13 +103,21 @@ class AuthRepository {
 
   Future<void> logout() => _auth.signOut();
 
-  /// Deletes the Firebase Auth account itself. Requires a recent sign-in —
-  /// callers must reauthenticate first (see [ProfileRepository.reauthenticate])
-  /// or this throws `requires-recent-login`. Must run last in the account
-  /// deletion sequence: once this succeeds the user is signed out, and any
+  /// Deletes the Firebase Auth account for [expectedUid] specifically —
+  /// never just "whoever is currently signed in". A caller can end up
+  /// running this after the signed-in user has already changed (see the
+  /// identity check in [finishAccountDeletion], which this backs up): if
+  /// this blindly deleted `currentUser`, a stale call meant for an account
+  /// that's already gone could delete a completely different, currently
+  /// live account instead. Requires a recent sign-in — callers must
+  /// reauthenticate first (see [ProfileRepository.reauthenticate]) or this
+  /// throws `requires-recent-login`. Must run last in the account deletion
+  /// sequence: once this succeeds the user is signed out, and any
   /// Firestore/RTDB cleanup still pending would fail auth rule checks.
-  Future<void> deleteAccount() async {
-    await _auth.currentUser?.delete();
+  Future<void> deleteAccount(String expectedUid) async {
+    final user = _auth.currentUser;
+    if (user == null || user.uid != expectedUid) return;
+    await user.delete();
   }
 
   Future<void> sendEmailVerification() async {
