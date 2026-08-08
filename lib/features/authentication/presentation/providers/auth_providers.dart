@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../notifications/data/repositories/notification_repository.dart';
+import '../../../profile/data/repositories/profile_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import 'presence_providers.dart';
 
@@ -60,6 +62,27 @@ class AuthController extends AsyncNotifier<void> {
       // the session. Reversing this order caused writes to be silently
       // rejected with permission-denied.
       await ref.read(presenceRepositoryProvider).stopTracking();
+
+      // Same ordering reasoning for the FCM token: must be cleared while
+      // still authenticated, or the Firestore write is silently a no-op.
+      // Not going through the Riverpod providers here (would need
+      // notification/profile provider imports into this file, which import
+      // this one back) — these repositories are cheap, dependency-light
+      // wrappers, so constructing them directly is simpler than untangling
+      // that. Deleting the token at the FCM level (not just clearing
+      // Firestore) matters on a shared/reused test device: without it, a
+      // different account logging in afterward can inherit this device's
+      // still-valid token before it ever calls getToken() again, and two
+      // accounts' Firestore profiles end up pointing at the same physical
+      // device — which is what caused pushes to sometimes reach the wrong
+      // person during multi-account testing on one emulator.
+      try {
+        await ProfileRepository().updateFcmToken(null);
+        await NotificationRepository().deleteToken();
+      } catch (_) {
+        // Best-effort — must never block sign-out itself.
+      }
+
       await ref.read(authRepositoryProvider).logout();
     });
   }

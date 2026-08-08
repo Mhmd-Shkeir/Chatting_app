@@ -11,6 +11,7 @@ class Conversation {
     this.unreadCounts = const {},
     this.createdAt,
     this.updatedAt,
+    this.clearedFor = const {},
   });
 
   final String id;
@@ -22,6 +23,14 @@ class Conversation {
   final Map<String, int> unreadCounts;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  /// Uid -> when that participant last cleared this chat (from inside via
+  /// "Clear chat" or from the conversation list via "Delete chat" — same
+  /// underlying operation, see ConversationRepository.clearChatForMe).
+  /// Messages/last-message-preview from before this timestamp are hidden
+  /// from that uid only; new activity after it makes the conversation
+  /// reappear in their list normally.
+  final Map<String, DateTime> clearedFor;
 
   String otherParticipantId(String myUid) {
     return participants.firstWhere((id) => id != myUid, orElse: () => myUid);
@@ -46,6 +55,11 @@ class Conversation {
       unreadCounts: Map<String, int>.from(data['unreadCounts'] as Map? ?? const {}),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      clearedFor: (data['clearedFor'] as Map?)?.map(
+            (key, value) =>
+                MapEntry(key as String, (value as Timestamp).toDate()),
+          ) ??
+          const {},
     );
   }
 }

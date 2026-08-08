@@ -14,7 +14,6 @@ import '../../../../core/widgets/photo_source_sheet.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
-import '../../../conversations/data/models/conversation.dart';
 import '../../../conversations/presentation/providers/conversation_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../data/models/message.dart';
@@ -123,14 +122,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
-  Conversation? _findConversation(List<Conversation>? conversations) {
-    if (conversations == null) return null;
-    for (final conversation in conversations) {
-      if (conversation.id == widget.conversationId) return conversation;
-    }
-    return null;
-  }
-
   String? _translationTarget(AppLanguage mine, AppLanguage other) {
     return mine == other ? null : mine.code;
   }
@@ -138,8 +129,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final myUid = ref.watch(authStateChangesProvider).value?.uid;
-    final conversations = ref.watch(conversationsStreamProvider).value;
-    final conversation = _findConversation(conversations);
+    // Deliberately not conversationsStreamProvider (which hides a
+    // cleared/deleted-from-list conversation) — this screen is explicitly
+    // open on a known conversationId and must keep resolving who the
+    // other participant is regardless of list visibility.
+    final conversation = ref
+        .watch(conversationDetailProvider(widget.conversationId))
+        .value;
     final otherUid = (myUid != null && conversation != null)
         ? conversation.otherParticipantId(myUid)
         : null;
@@ -229,6 +225,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<void>(
+            itemBuilder: (_) => [
+              PopupMenuItem<void>(
+                // Deferred to a microtask so the popup route finishes
+                // closing before the dialog opens; uses the State's own
+                // (stable, long-lived) context rather than itemBuilder's
+                // transient one, which the popup route owns and tears
+                // down as part of closing.
+                onTap: () => Future(() {
+                  if (context.mounted) _confirmClearChat(context);
+                }),
+                child: const Text('Clear chat'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -241,9 +254,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 // "Delete for me" hides a message only from the deleter's
                 // own view — the doc and its content stay untouched for
                 // the other participant, so this filter (not a rules
-                // change) is what actually implements it.
+                // change) is what actually implements it. clearedAt does
+                // the same for "Clear chat"/"Delete chat" in bulk: hide
+                // everything at-or-before whenever this user last cleared
+                // this conversation.
+                final clearedAt = conversation?.clearedFor[myUid];
                 final visibleMessages = messages
-                    .where((m) => m.deletedFor[myUid] != true)
+                    .where(
+                      (m) =>
+                          m.deletedFor[myUid] != true &&
+                          (clearedAt == null ||
+                              m.timestamp == null ||
+                              m.timestamp!.isAfter(clearedAt)),
+                    )
                     .toList();
                 if (visibleMessages.isEmpty) {
                   return const Center(
@@ -518,6 +541,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() => _editingMessage = null);
   }
 
+  Future<void> _confirmClearChat(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear chat?'),
+        content: const Text(
+          'This clears the chat history from your view only — the other '
+          'person keeps seeing their messages normally.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref
+          .read(conversationRepositoryProvider)
+          .clearChatForMe(widget.conversationId);
+    }
+  }
+
   Future<void> _sendImage(String recipientId) async {
     final action = await showModalBottomSheet<PhotoSourceAction>(
       context: context,
@@ -596,9 +647,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _stopAndSendRecording() async {
-    final recipientId = _findConversation(
-      ref.read(conversationsStreamProvider).value,
-    )?.otherParticipantId(ref.read(authStateChangesProvider).value?.uid ?? '');
+    final recipientId = ref
+        .read(conversationDetailProvider(widget.conversationId))
+        .value
+        ?.otherParticipantId(ref.read(authStateChangesProvider).value?.uid ?? '');
     _recordTimer?.cancel();
     final path = await _recorder.stop();
     final duration = _recordSeconds;

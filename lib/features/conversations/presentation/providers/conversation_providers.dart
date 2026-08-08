@@ -13,3 +13,14 @@ final conversationsStreamProvider = StreamProvider<List<Conversation>>((ref) {
   if (myUid == null) return const Stream.empty();
   return ref.watch(conversationRepositoryProvider).streamConversations(myUid);
 });
+
+/// Direct-by-ID, never filtered by "cleared" state — see
+/// ConversationRepository.streamConversation for why this has to be a
+/// separate provider from [conversationsStreamProvider] rather than a
+/// lookup into its (list-visibility-filtered) results.
+final conversationDetailProvider =
+    StreamProvider.family<Conversation?, String>((ref, conversationId) {
+  return ref
+      .watch(conversationRepositoryProvider)
+      .streamConversation(conversationId);
+});

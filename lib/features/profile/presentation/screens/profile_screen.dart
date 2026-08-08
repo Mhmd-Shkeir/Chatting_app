@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/utils/firebase_error_mapper.dart';
+import '../../../../core/utils/username_validator.dart';
 import '../../../../core/widgets/auth_text_field_decoration.dart';
 import '../../../../core/widgets/error_banner.dart';
 import '../../../../core/widgets/photo_source_sheet.dart';
@@ -25,6 +28,30 @@ class ProfileScreen extends ConsumerWidget {
       if (error != null && context.mounted) {
         showErrorSnackBar(context, mapAuthError(error));
       }
+    }
+  }
+
+  Future<void> _editUsername(
+    BuildContext context,
+    WidgetRef ref,
+    String currentUsername,
+  ) async {
+    final newUsername = await showDialog<String>(
+      context: context,
+      builder: (context) => _EditUsernameDialog(currentUsername: currentUsername),
+    );
+    // A no-op if unchanged — skip the write (and the transaction re-claiming
+    // a username you already own) entirely.
+    if (newUsername == null ||
+        newUsername.toLowerCase() == currentUsername.toLowerCase() ||
+        !context.mounted) {
+      return;
+    }
+
+    await ref.read(profileControllerProvider.notifier).claimUsername(newUsername);
+    final error = ref.read(profileControllerProvider).error;
+    if (error != null && context.mounted) {
+      showErrorSnackBar(context, mapAuthError(error));
     }
   }
 
@@ -132,12 +159,34 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 if (user.hasUsername) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    '@${user.username}',
-                    textAlign: TextAlign.center,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.w600,
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: profileState.isLoading
+                        ? null
+                        : () => _editUsername(context, ref, user.username!),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '@${user.username}',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 14,
+                            color: colorScheme.primary,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -242,6 +291,124 @@ class _EditDisplayNameDialogState extends State<_EditDisplayNameDialog> {
           ),
           validator: (value) =>
               (value == null || value.trim().isEmpty) ? 'Enter a display name' : null,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              Navigator.of(context).pop(_controller.text.trim());
+            }
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Same live-availability UX as [ChooseUsernameScreen], reused for editing
+/// an existing username rather than claiming one for the first time — the
+/// underlying [ProfileController.claimUsername] transaction doesn't care
+/// which case it is.
+class _EditUsernameDialog extends ConsumerStatefulWidget {
+  const _EditUsernameDialog({required this.currentUsername});
+
+  final String currentUsername;
+
+  @override
+  ConsumerState<_EditUsernameDialog> createState() => _EditUsernameDialogState();
+}
+
+class _EditUsernameDialogState extends ConsumerState<_EditUsernameDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final _controller = TextEditingController(text: widget.currentUsername);
+  Timer? _debounce;
+  late String _debouncedUsername = widget.currentUsername;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _debouncedUsername = value.trim());
+    });
+  }
+
+  Widget _availability(ColorScheme colorScheme) {
+    final username = _debouncedUsername;
+    if (username.isEmpty || !usernamePattern.hasMatch(username)) {
+      return const SizedBox.shrink();
+    }
+    // Re-checking your own current username against the registry would
+    // always come back "taken" (you're the one holding it) — that's not
+    // useful feedback, so it's special-cased instead of hitting Firestore.
+    if (username.toLowerCase() == widget.currentUsername.toLowerCase()) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6, left: 4),
+        child: Text(
+          'This is your current username',
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+        ),
+      );
+    }
+
+    final availability = ref.watch(usernameAvailabilityProvider(username.toLowerCase()));
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 4),
+      child: availability.when(
+        loading: () => Text(
+          'Checking availability…',
+          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+        ),
+        error: (_, _) => const SizedBox.shrink(),
+        data: (isAvailable) => Text(
+          isAvailable ? '@$username is available' : '@$username is already taken',
+          style: TextStyle(
+            fontSize: 12,
+            color: isAvailable ? Colors.lightGreen : colorScheme.error,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      title: const Text('Edit username'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _controller,
+              autofocus: true,
+              onChanged: _onChanged,
+              decoration: authFieldDecoration(
+                context,
+                label: 'Username',
+                icon: Icons.alternate_email,
+              ),
+              validator: validateUsername,
+            ),
+            _availability(colorScheme),
+          ],
         ),
       ),
       actions: [

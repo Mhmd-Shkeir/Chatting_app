@@ -108,11 +108,44 @@ class HomeScreen extends ConsumerWidget {
                       conversation: conversation,
                       myUid: myUid,
                       onTap: () => context.push('/chat/${conversation.id}'),
+                      onLongPress: () =>
+                          _confirmDeleteChat(context, ref, conversation.id),
                     );
                   },
                 );
               },
             ),
     );
+  }
+}
+
+Future<void> _confirmDeleteChat(
+  BuildContext context,
+  WidgetRef ref,
+  String conversationId,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete chat?'),
+      content: const Text(
+        'This removes the conversation from your list only — the other '
+        'person keeps seeing it normally. It reappears here if they send '
+        'a new message.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed == true) {
+    await ref.read(conversationRepositoryProvider).clearChatForMe(conversationId);
   }
 }

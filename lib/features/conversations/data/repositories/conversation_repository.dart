@@ -20,8 +20,49 @@ class ConversationRepository {
         .map(
           (snapshot) => snapshot.docs
               .map((doc) => Conversation.fromFirestore(doc.data(), doc.id))
+              // "Delete chat" from the list is really "clear it, but bring
+              // it back the moment there's new activity" — so a
+              // conversation stays hidden only while nothing has happened
+              // since the clear.
+              .where((conversation) {
+                final clearedAt = conversation.clearedFor[uid];
+                if (clearedAt == null) return true;
+                final lastActivity = conversation.lastMessageTimestamp;
+                return lastActivity != null && lastActivity.isAfter(clearedAt);
+              })
               .toList(),
         );
+  }
+
+  /// Unfiltered, direct-by-ID lookup — deliberately separate from
+  /// [streamConversations], which hides a conversation from the *list*
+  /// after it's been cleared. A screen that's explicitly open on a known
+  /// conversationId (chat screen, opening from search, etc.) must still
+  /// resolve who the other participant is and be able to send to them
+  /// regardless of list visibility — clearing a chat only affects the
+  /// list/history, never the underlying conversation or the ability to
+  /// message that person again.
+  Stream<Conversation?> streamConversation(String conversationId) {
+    return _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .snapshots()
+        .map(
+          (doc) => doc.exists
+              ? Conversation.fromFirestore(doc.data()!, doc.id)
+              : null,
+        );
+  }
+
+  /// Shared by "Clear chat" (inside a conversation) and "Delete chat"
+  /// (from the conversation list) — same operation, just triggered from
+  /// two different places. Per-uid, so it never touches the other
+  /// participant's view of this conversation.
+  Future<void> clearChatForMe(String conversationId) async {
+    final uid = _auth.currentUser!.uid;
+    await _firestore.collection('conversations').doc(conversationId).update({
+      'clearedFor.$uid': FieldValue.serverTimestamp(),
+    });
   }
 
   /// Conversation IDs are deterministic (sorted participant uids joined with

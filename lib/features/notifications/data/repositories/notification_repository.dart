@@ -17,6 +17,13 @@ class NotificationRepository {
 
   Future<String?> getToken() => _messaging.getToken();
 
+  /// Invalidates this device's current FCM token outright (not just
+  /// clearing the Firestore copy) — called on sign-out so a device that
+  /// later signs in as a *different* account can never inherit a stale
+  /// token still pointing at the account that just signed out. The next
+  /// getToken() call (on the next login) mints a genuinely fresh one.
+  Future<void> deleteToken() => _messaging.deleteToken();
+
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
   /// Fires while the app is in the foreground. FCM does not auto-display a

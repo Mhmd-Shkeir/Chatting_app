@@ -12,12 +12,14 @@ class ConversationTile extends ConsumerWidget {
     required this.conversation,
     required this.myUid,
     required this.onTap,
+    this.onLongPress,
     super.key,
   });
 
   final Conversation conversation;
   final String myUid;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -41,6 +43,7 @@ class ConversationTile extends ConsumerWidget {
 
     return ListTile(
       onTap: onTap,
+      onLongPress: onLongPress,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Stack(
         clipBehavior: Clip.none,
