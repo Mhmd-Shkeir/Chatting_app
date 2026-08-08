@@ -68,6 +68,13 @@ service cloud.firestore {
         //      given language is the same for everyone), so unlike
         //      reactions there's no per-key ownership restriction — any
         //      participant may add or overwrite any language's entry.
+        //   5. The sender editing their own text message — text + edited
+        //      only. get('type','text') treats a missing type field as
+        //      text, since original text messages never wrote that key.
+        //   6. The sender deleting their own message for everyone — clears
+        //      content and flags it; the doc itself stays (no hard delete).
+        //   7. Any participant deleting a message "for me" — same
+        //      per-key-ownership shape as reactions, but on deletedFor.
         allow update: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
           && (
@@ -79,6 +86,13 @@ service cloud.firestore {
             || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
               && request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid]))
             || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['translations'])
+            || (request.auth.uid == resource.data.senderId
+              && resource.data.get('type', 'text') == 'text'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited']))
+            || (request.auth.uid == resource.data.senderId
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'imageUrl', 'audioUrl', 'deletedForEveryone']))
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedFor'])
+              && request.resource.data.deletedFor.diff(resource.data.get('deletedFor', {})).affectedKeys().hasOnly([request.auth.uid]))
           );
       }
     }

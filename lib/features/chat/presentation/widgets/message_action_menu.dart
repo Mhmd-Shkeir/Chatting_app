@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
+import 'forward_message_sheet.dart';
 
 /// Quick-reaction choices shown at the top of the long-press menu. Adding
 /// another emoji later is just extending this list — the row, the
@@ -37,6 +38,7 @@ Future<void> showMessageActionMenu(
   required Message message,
   required bool isMine,
   required String currentUserId,
+  ValueChanged<Message>? onEdit,
 }) {
   final actions = <MessageActionItem>[
     MessageActionItem(
@@ -44,11 +46,28 @@ Future<void> showMessageActionMenu(
       label: 'Reply',
       onTap: () => ref.read(replyingToProvider.notifier).set(message),
     ),
-    if (isMine)
-      const MessageActionItem(icon: Icons.edit_outlined, label: 'Edit'),
-    if (isMine)
-      const MessageActionItem(icon: Icons.delete_outline, label: 'Delete'),
-    const MessageActionItem(icon: Icons.forward_outlined, label: 'Forward'),
+    if (isMine && message.type == MessageType.text && onEdit != null)
+      MessageActionItem(
+        icon: Icons.edit_outlined,
+        label: 'Edit',
+        onTap: () => onEdit(message),
+      ),
+    MessageActionItem(
+      icon: Icons.delete_outline,
+      label: 'Delete',
+      onTap: () => _showDeleteChoices(
+        context,
+        ref: ref,
+        conversationId: conversationId,
+        message: message,
+        isMine: isMine,
+      ),
+    ),
+    MessageActionItem(
+      icon: Icons.forward_outlined,
+      label: 'Forward',
+      onTap: () => showForwardMessageSheet(context, ref: ref, message: message),
+    ),
     if (message.type == MessageType.text)
       MessageActionItem(
         icon: Icons.copy_outlined,
@@ -81,6 +100,53 @@ Future<void> showMessageActionMenu(
           );
         }
       },
+    ),
+  );
+}
+
+/// "Delete for me" (always available) vs "Delete for everyone" (sender
+/// only) — shown as a second, focused sheet rather than cramming both
+/// choices into the main action list.
+void _showDeleteChoices(
+  BuildContext context, {
+  required WidgetRef ref,
+  required String conversationId,
+  required Message message,
+  required bool isMine,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (_) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.person_remove_outlined),
+            title: const Text('Delete for me'),
+            onTap: () {
+              Navigator.of(context).pop();
+              ref.read(chatRepositoryProvider).deleteMessageForMe(
+                    conversationId: conversationId,
+                    messageId: message.id,
+                  );
+            },
+          ),
+          if (isMine)
+            ListTile(
+              leading: const Icon(Icons.delete_forever_outlined),
+              title: const Text('Delete for everyone'),
+              onTap: () {
+                Navigator.of(context).pop();
+                ref.read(chatRepositoryProvider).deleteMessageForEveryone(
+                      conversationId: conversationId,
+                      messageId: message.id,
+                      type: message.type,
+                    );
+              },
+            ),
+        ],
+      ),
     ),
   );
 }

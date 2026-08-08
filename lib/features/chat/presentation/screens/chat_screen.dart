@@ -41,6 +41,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String? _highlightedMessageId;
   Timer? _highlightTimer;
   bool _showEmojiPicker = false;
+  Message? _editingMessage;
 
   final _recorder = AudioRecorder();
   bool _isRecording = false;
@@ -237,7 +238,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               error: (error, _) =>
                   Center(child: Text('Something went wrong: $error')),
               data: (messages) {
-                if (messages.isEmpty) {
+                // "Delete for me" hides a message only from the deleter's
+                // own view — the doc and its content stay untouched for
+                // the other participant, so this filter (not a rules
+                // change) is what actually implements it.
+                final visibleMessages = messages
+                    .where((m) => m.deletedFor[myUid] != true)
+                    .toList();
+                if (visibleMessages.isEmpty) {
                   return const Center(
                     child: Text('No messages yet. Say hello.'),
                   );
@@ -263,9 +271,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     // message that isn't built yet (see _scrollToMessage)
                     // lands close enough for its bubble to already exist.
                     cacheExtent: 2000,
-                    itemCount: messages.length,
+                    itemCount: visibleMessages.length,
                     itemBuilder: (context, index) {
-                      final message = messages[index];
+                      final message = visibleMessages[index];
                       return MessageBubble(
                         key: _keyFor(message.id),
                         message: message,
@@ -274,7 +282,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         recipientId: otherUid ?? '',
                         currentUserId: myUid ?? '',
                         otherUserName: otherName,
-                        onReplyTap: (id) => _scrollToMessage(id, messages),
+                        onReplyTap: (id) =>
+                            _scrollToMessage(id, visibleMessages),
+                        onEdit: _startEditing,
                         isHighlighted: message.id == _highlightedMessageId,
                         translateToLanguageCode: translateToLanguageCode,
                       );
@@ -291,7 +301,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (replyingTo != null)
+                  if (_editingMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: ReplyPreviewStrip(
+                        senderLabel: 'Editing message',
+                        preview: _editingMessage!.text,
+                        onCancel: _cancelEditing,
+                      ),
+                    )
+                  else if (replyingTo != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: ReplyPreviewStrip(
@@ -360,7 +379,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ValueListenableBuilder<TextEditingValue>(
                           valueListenable: _textController,
                           builder: (context, value, _) {
-                            if (value.text.trim().isEmpty) {
+                            if (value.text.trim().isEmpty &&
+                                _editingMessage == null) {
                               return IconButton.filled(
                                 icon: const Icon(Icons.mic),
                                 onPressed: otherUid == null
@@ -451,8 +471,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _send(String? recipientId) async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) return;
+
+    final editing = _editingMessage;
+    if (editing != null) {
+      _textController.clear();
+      setState(() => _editingMessage = null);
+      await ref
+          .read(chatRepositoryProvider)
+          .editMessage(
+            conversationId: widget.conversationId,
+            messageId: editing.id,
+            newText: text,
+          );
+      return;
+    }
+
     if (recipientId == null) return;
-    final text = _textController.text;
     final replyingTo = ref.read(replyingToProvider);
     _textController.clear();
     ref.read(replyingToProvider.notifier).clear();
@@ -466,6 +502,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ? null
               : ReplyPreview.fromMessage(replyingTo),
         );
+  }
+
+  void _startEditing(Message message) {
+    ref.read(replyingToProvider.notifier).clear();
+    _textController.text = message.text;
+    _textController.selection = TextSelection.collapsed(
+      offset: message.text.length,
+    );
+    setState(() => _editingMessage = message);
+  }
+
+  void _cancelEditing() {
+    _textController.clear();
+    setState(() => _editingMessage = null);
   }
 
   Future<void> _sendImage(String recipientId) async {

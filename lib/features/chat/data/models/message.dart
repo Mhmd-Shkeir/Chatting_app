@@ -18,6 +18,10 @@ class Message {
     this.replyTo,
     this.reactions = const {},
     this.translations = const {},
+    this.edited = false,
+    this.deletedForEveryone = false,
+    this.deletedFor = const {},
+    this.forwarded = false,
   });
 
   final String id;
@@ -49,6 +53,28 @@ class Message {
   /// don't re-call the translation API. [text] itself is never overwritten.
   final Map<String, String> translations;
 
+  /// Text messages only — set when the sender edits their own message
+  /// after sending. The original text is intentionally not preserved
+  /// anywhere (no edit history), matching the roadmap's "preserve if
+  /// needed" note interpreted as not required for this app.
+  final bool edited;
+
+  /// Sender deleted this for every participant — content is cleared
+  /// (`text`/`imageUrl`/`audioUrl`) and the bubble renders a placeholder
+  /// instead. Distinct from [deletedFor], which is per-viewer.
+  final bool deletedForEveryone;
+
+  /// Uid -> true for participants who deleted this message "for me" —
+  /// mirrors [reactions]' per-user-key shape. The message doc still
+  /// exists (still visible/editable by others); ChatScreen filters it out
+  /// of the list for uids present here.
+  final Map<String, bool> deletedFor;
+
+  /// Set on the new message doc created by forwarding — shown as a small
+  /// "Forwarded" label, distinct from a reply (no link back to the
+  /// original message/conversation).
+  final bool forwarded;
+
   factory Message.fromFirestore(Map<String, dynamic> data, String id) {
     final replyToData = data['replyTo'];
     final reactionsData = data['reactions'];
@@ -72,6 +98,12 @@ class Message {
       translations: translationsData is Map
           ? Map<String, String>.from(translationsData)
           : const {},
+      edited: data['edited'] as bool? ?? false,
+      deletedForEveryone: data['deletedForEveryone'] as bool? ?? false,
+      deletedFor: data['deletedFor'] is Map
+          ? Map<String, bool>.from(data['deletedFor'] as Map)
+          : const {},
+      forwarded: data['forwarded'] as bool? ?? false,
     );
   }
 }

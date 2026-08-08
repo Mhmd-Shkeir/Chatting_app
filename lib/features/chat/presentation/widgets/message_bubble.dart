@@ -22,6 +22,7 @@ class MessageBubble extends ConsumerWidget {
     required this.currentUserId,
     required this.otherUserName,
     this.onReplyTap,
+    this.onEdit,
     this.isHighlighted = false,
     this.translateToLanguageCode,
     super.key,
@@ -34,6 +35,7 @@ class MessageBubble extends ConsumerWidget {
   final String currentUserId;
   final String otherUserName;
   final ValueChanged<String>? onReplyTap;
+  final ValueChanged<Message>? onEdit;
   final bool isHighlighted;
 
   /// Non-null when the viewer's preferred language differs from the
@@ -68,14 +70,17 @@ class MessageBubble extends ConsumerWidget {
 
     return SwipeToReply(
       onReply: () => ref.read(replyingToProvider.notifier).set(message),
-      onLongPress: () => showMessageActionMenu(
-        context,
-        ref: ref,
-        conversationId: conversationId,
-        message: message,
-        isMine: isMine,
-        currentUserId: currentUserId,
-      ),
+      onLongPress: message.deletedForEveryone
+          ? null
+          : () => showMessageActionMenu(
+              context,
+              ref: ref,
+              conversationId: conversationId,
+              message: message,
+              isMine: isMine,
+              currentUserId: currentUserId,
+              onEdit: onEdit,
+            ),
       child: Align(
         alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
         child: Column(
@@ -125,7 +130,29 @@ class MessageBubble extends ConsumerWidget {
                             : colorScheme.onSurface,
                       ),
                     ),
-                  if (isImage)
+                  if (message.forwarded && !message.deletedForEveryone)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'Forwarded',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: timestampColor,
+                        ),
+                      ),
+                    ),
+                  if (message.deletedForEveryone)
+                    Text(
+                      isMine
+                          ? 'You deleted this message'
+                          : 'This message was deleted',
+                      style: TextStyle(
+                        color: timestampColor,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  else if (isImage)
                     _ImageContent(
                       message: message,
                       isMine: isMine,
@@ -168,6 +195,17 @@ class MessageBubble extends ConsumerWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (message.edited && !message.deletedForEveryone) ...[
+                          Text(
+                            'edited',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: timestampColor,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
                         if (message.timestamp != null)
                           Text(
                             DateFormat.jm().format(message.timestamp!),
@@ -189,7 +227,7 @@ class MessageBubble extends ConsumerWidget {
                 ],
               ),
             ),
-            if (message.reactions.isNotEmpty)
+            if (message.reactions.isNotEmpty && !message.deletedForEveryone)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: _ReactionsRow(

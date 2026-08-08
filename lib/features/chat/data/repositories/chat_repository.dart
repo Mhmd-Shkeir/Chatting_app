@@ -285,6 +285,104 @@ class ChatRepository {
         .update({'translations.$languageCode': translatedText});
   }
 
+  /// Edits the sender's own text message. No edit history is kept — just
+  /// the new text plus an `edited` flag for the bubble's indicator.
+  Future<void> editMessage({
+    required String conversationId,
+    required String messageId,
+    required String newText,
+  }) async {
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'text': newText, 'edited': true});
+  }
+
+  /// Sender-only: clears the message's content for every participant and
+  /// flags it so bubbles render a placeholder instead. The doc itself is
+  /// kept (not hard-deleted) — same reasoning as tombstoning a user doc:
+  /// avoids needing a `delete` rule and keeps the surrounding messages'
+  /// order/pagination untouched.
+  Future<void> deleteMessageForEveryone({
+    required String conversationId,
+    required String messageId,
+    required MessageType type,
+  }) async {
+    final updates = <String, Object?>{'deletedForEveryone': true, 'text': ''};
+    if (type == MessageType.image) updates['imageUrl'] = null;
+    if (type == MessageType.voice) updates['audioUrl'] = null;
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update(updates);
+  }
+
+  /// Removes the message from only the caller's own view — a dot-path
+  /// write touching just their own key in `deletedFor`, same ownership
+  /// shape as [setReaction]. The other participant keeps seeing it
+  /// normally; the doc and its content are untouched.
+  Future<void> deleteMessageForMe({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final uid = _auth.currentUser!.uid;
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'deletedFor.$uid': true});
+  }
+
+  /// Copies [message]'s content into a brand-new message doc in
+  /// [targetConversationId] — no upload needed since image/voice URLs are
+  /// already hosted; a reply/forward chain isn't preserved (matches most
+  /// chat apps' "forward" semantics, as opposed to a reply).
+  Future<void> forwardMessage({
+    required String targetConversationId,
+    required String targetRecipientId,
+    required Message message,
+  }) async {
+    final senderId = _auth.currentUser!.uid;
+    final conversationRef = _firestore
+        .collection('conversations')
+        .doc(targetConversationId);
+    final messageRef = conversationRef.collection('messages').doc();
+
+    final batch = _firestore.batch();
+    batch.set(messageRef, {
+      'id': messageRef.id,
+      'senderId': senderId,
+      'text': message.text,
+      'type': switch (message.type) {
+        MessageType.image => 'image',
+        MessageType.voice => 'voice',
+        MessageType.text => 'text',
+      },
+      if (message.imageUrl != null) 'imageUrl': message.imageUrl,
+      if (message.audioUrl != null) 'audioUrl': message.audioUrl,
+      if (message.durationSeconds != null)
+        'durationSeconds': message.durationSeconds,
+      'status': 'sent',
+      'forwarded': true,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    batch.update(conversationRef, {
+      'lastMessage': message.type == MessageType.text
+          ? message.text
+          : (message.type == MessageType.image ? 'Photo' : 'Voice message'),
+      'lastMessageSenderId': senderId,
+      'lastMessageTimestamp': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'unreadCounts.$targetRecipientId': FieldValue.increment(1),
+    });
+    await batch.commit();
+  }
+
   Future<void> markConversationRead(String conversationId) async {
     final myUid = _auth.currentUser!.uid;
     await _firestore.collection('conversations').doc(conversationId).update({
