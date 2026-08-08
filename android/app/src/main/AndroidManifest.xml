@@ -5,6 +5,8 @@
     <!-- Runtime prompt on Android 13+ for showing notifications; no-op on
          older Android where notifications are allowed by default. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- For recording voice messages. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:label="chatting_app_flu"
         android:name="${applicationName}"

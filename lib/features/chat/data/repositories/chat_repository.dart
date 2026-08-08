@@ -122,6 +122,89 @@ class ChatRepository {
     await batch.commit();
   }
 
+  /// Mirrors [sendPendingImageMessage] for voice messages — a pending doc
+  /// (status: sending, no audioUrl yet) so it's visible to both
+  /// participants while the recording uploads. [durationSeconds] is
+  /// captured client-side while recording and stored up front since it
+  /// doesn't change once the upload completes.
+  Future<String> sendPendingVoiceMessage(
+    String conversationId, {
+    required int durationSeconds,
+    ReplyPreview? replyTo,
+  }) async {
+    final senderId = _auth.currentUser!.uid;
+    final messageRef = _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc();
+
+    await messageRef.set({
+      'id': messageRef.id,
+      'senderId': senderId,
+      'text': '',
+      'type': 'voice',
+      'audioUrl': null,
+      'durationSeconds': durationSeconds,
+      'status': 'sending',
+      'timestamp': FieldValue.serverTimestamp(),
+      if (replyTo != null) 'replyTo': replyTo.toMap(),
+    });
+
+    return messageRef.id;
+  }
+
+  /// Mirrors [completeImageMessage] for voice messages.
+  Future<void> completeVoiceMessage({
+    required String conversationId,
+    required String messageId,
+    required String recipientId,
+    required String audioUrl,
+  }) async {
+    final senderId = _auth.currentUser!.uid;
+    final conversationRef = _firestore
+        .collection('conversations')
+        .doc(conversationId);
+    final messageRef = conversationRef.collection('messages').doc(messageId);
+
+    final batch = _firestore.batch();
+    batch.update(messageRef, {'audioUrl': audioUrl, 'status': 'sent'});
+    batch.update(conversationRef, {
+      'lastMessage': 'Voice message',
+      'lastMessageSenderId': senderId,
+      'lastMessageTimestamp': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'unreadCounts.$recipientId': FieldValue.increment(1),
+    });
+    await batch.commit();
+  }
+
+  /// Mirrors [failImageMessage] for voice messages.
+  Future<void> failVoiceMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'status': 'failed'});
+  }
+
+  /// Mirrors [retryImageMessage] for voice messages.
+  Future<void> retryVoiceMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'status': 'sending'});
+  }
+
   /// Marks a pending (or previously failed, on a retry that failed again)
   /// image message as failed, so the sender's own bubble can offer a retry
   /// instead of spinning forever.

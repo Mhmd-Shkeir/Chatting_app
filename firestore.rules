@@ -75,7 +75,7 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
             || (request.auth.uid == resource.data.senderId
               && resource.data.status in ['sending', 'failed']
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'imageUrl']))
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'imageUrl', 'audioUrl']))
             || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
               && request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid]))
             || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['translations'])

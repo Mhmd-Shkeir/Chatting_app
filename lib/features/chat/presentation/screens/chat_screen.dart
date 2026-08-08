@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 
 import '../../../../core/localization/app_language.dart';
 import '../../../../core/utils/presence_formatter.dart';
@@ -37,6 +40,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _messageKeys = <String, GlobalKey>{};
   String? _highlightedMessageId;
   Timer? _highlightTimer;
+  bool _showEmojiPicker = false;
+
+  final _recorder = AudioRecorder();
+  bool _isRecording = false;
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
+  String? _recordingPath;
 
   @override
   void initState() {
@@ -53,6 +63,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _textController.dispose();
     _listController.dispose();
     _highlightTimer?.cancel();
+    _recordTimer?.cancel();
+    _recorder.dispose();
     super.dispose();
   }
 
@@ -293,61 +305,114 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ref.read(replyingToProvider.notifier).clear(),
                       ),
                     ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.image_outlined),
-                        onPressed: otherUid == null
-                            ? null
-                            : () => _sendImage(otherUid),
-                      ),
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(24),
+                  if (_isRecording)
+                    _buildRecordingRow(context)
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.image_outlined),
+                          onPressed: otherUid == null
+                              ? null
+                              : () => _sendImage(otherUid),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            _showEmojiPicker
+                                ? Icons.keyboard
+                                : Icons.emoji_emotions_outlined,
                           ),
-                          child: TextField(
-                            controller: _textController,
-                            minLines: 1,
-                            maxLines: 5,
-                            textCapitalization: TextCapitalization.sentences,
-                            decoration: const InputDecoration(
-                              hintText: 'Message',
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
+                          onPressed: _toggleEmojiPicker,
+                        ),
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(24),
                             ),
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _send(otherUid),
+                            child: TextField(
+                              controller: _textController,
+                              minLines: 1,
+                              maxLines: 5,
+                              textCapitalization: TextCapitalization.sentences,
+                              decoration: const InputDecoration(
+                                hintText: 'Message',
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                              textInputAction: TextInputAction.send,
+                              onTap: () {
+                                if (_showEmojiPicker) {
+                                  setState(() => _showEmojiPicker = false);
+                                }
+                              },
+                              onSubmitted: (_) => _send(otherUid),
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: _textController,
+                          builder: (context, value, _) {
+                            if (value.text.trim().isEmpty) {
+                              return IconButton.filled(
+                                icon: const Icon(Icons.mic),
+                                onPressed: otherUid == null
+                                    ? null
+                                    : _startRecording,
+                              );
+                            }
+                            return IconButton.filled(
+                              icon: sendState.isLoading
+                                  ? SizedBox(
+                                      height: 18,
+                                      width: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onPrimary,
+                                      ),
+                                    )
+                                  : const Icon(Icons.send),
+                              onPressed: sendState.isLoading
+                                  ? null
+                                  : () => _send(otherUid),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  if (_showEmojiPicker)
+                    SizedBox(
+                      height: 260,
+                      child: EmojiPicker(
+                        onEmojiSelected: (category, emoji) {
+                          final selection = _textController.selection;
+                          final text = _textController.text;
+                          final insertAt = selection.start < 0
+                              ? text.length
+                              : selection.start;
+                          final newText = text.replaceRange(
+                            insertAt,
+                            selection.end < 0 ? insertAt : selection.end,
+                            emoji.emoji,
+                          );
+                          _textController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: insertAt + emoji.emoji.length,
+                            ),
+                          );
+                        },
                       ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        icon: sendState.isLoading
-                            ? SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimary,
-                                ),
-                              )
-                            : const Icon(Icons.send),
-                        onPressed: sendState.isLoading
-                            ? null
-                            : () => _send(otherUid),
-                      ),
-                    ],
-                  ),
+                    ),
                 ],
               ),
             ),
@@ -355,6 +420,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildRecordingRow(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final minutes = (_recordSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (_recordSeconds % 60).toString().padLeft(2, '0');
+    return Row(
+      children: [
+        IconButton(
+          icon: Icon(Icons.delete_outline, color: colorScheme.error),
+          onPressed: _cancelRecording,
+        ),
+        Icon(Icons.fiber_manual_record, color: colorScheme.error, size: 14),
+        const SizedBox(width: 8),
+        Text('Recording $minutes:$seconds'),
+        const Spacer(),
+        IconButton.filled(icon: const Icon(Icons.send), onPressed: _stopAndSendRecording),
+      ],
+    );
+  }
+
+  void _toggleEmojiPicker() {
+    if (_showEmojiPicker) {
+      setState(() => _showEmojiPicker = false);
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _showEmojiPicker = true);
   }
 
   Future<void> _send(String? recipientId) async {
@@ -400,6 +493,83 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           conversationId: widget.conversationId,
           recipientId: recipientId,
           file: File(picked.path),
+          replyTo: replyingTo == null
+              ? null
+              : ReplyPreview.fromMessage(replyingTo),
+        );
+  }
+
+  Future<void> _startRecording() async {
+    if (!await _recorder.hasPermission()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Microphone permission is needed to record voice messages. '
+              'Enable it in the app\'s system settings.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
+    final path =
+        '${dir.path}/lumina_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.start(const RecordConfig(), path: path);
+
+    setState(() {
+      _isRecording = true;
+      _recordSeconds = 0;
+      _recordingPath = path;
+      _showEmojiPicker = false;
+    });
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordSeconds++);
+    });
+  }
+
+  Future<void> _cancelRecording() async {
+    _recordTimer?.cancel();
+    await _recorder.stop();
+    final path = _recordingPath;
+    if (path != null) {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    }
+    if (!mounted) return;
+    setState(() {
+      _isRecording = false;
+      _recordingPath = null;
+    });
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    final recipientId = _findConversation(
+      ref.read(conversationsStreamProvider).value,
+    )?.otherParticipantId(ref.read(authStateChangesProvider).value?.uid ?? '');
+    _recordTimer?.cancel();
+    final path = await _recorder.stop();
+    final duration = _recordSeconds;
+    if (!mounted) return;
+    setState(() {
+      _isRecording = false;
+      _recordingPath = null;
+    });
+
+    final resolvedPath = path ?? _recordingPath;
+    if (resolvedPath == null || recipientId == null || duration < 1) return;
+
+    final replyingTo = ref.read(replyingToProvider);
+    ref.read(replyingToProvider.notifier).clear();
+    await ref
+        .read(sendVoiceMessageControllerProvider.notifier)
+        .send(
+          conversationId: widget.conversationId,
+          recipientId: recipientId,
+          file: File(resolvedPath),
+          durationSeconds: duration,
           replyTo: replyingTo == null
               ? null
               : ReplyPreview.fromMessage(replyingTo),

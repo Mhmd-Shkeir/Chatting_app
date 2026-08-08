@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,9 +46,10 @@ class MessageBubble extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final isImage = message.type == MessageType.image;
+    final isVoice = message.type == MessageType.voice;
     final replyTo = message.replyTo;
     final needsTranslation =
-        !isMine && !isImage && translateToLanguageCode != null;
+        !isMine && !isImage && !isVoice && translateToLanguageCode != null;
 
     final timestampColor =
         (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(
@@ -129,6 +131,17 @@ class MessageBubble extends ConsumerWidget {
                       isMine: isMine,
                       conversationId: conversationId,
                       recipientId: recipientId,
+                      ref: ref,
+                    )
+                  else if (isVoice)
+                    _VoiceContent(
+                      message: message,
+                      isMine: isMine,
+                      conversationId: conversationId,
+                      recipientId: recipientId,
+                      textColor: isMine
+                          ? colorScheme.onPrimary
+                          : colorScheme.onSurface,
                       ref: ref,
                     )
                   else if (needsTranslation)
@@ -310,6 +323,181 @@ class _ImageContent extends StatelessWidget {
       return Image.file(localFile, fit: BoxFit.cover);
     }
     return const ColoredBox(color: Colors.black26);
+  }
+}
+
+/// Play/pause + progress for a voice message, or a "Tap to retry" state
+/// while the upload is still pending/failed — mirrors [_ImageContent]'s
+/// failed-state handling but for audio.
+class _VoiceContent extends StatefulWidget {
+  const _VoiceContent({
+    required this.message,
+    required this.isMine,
+    required this.conversationId,
+    required this.recipientId,
+    required this.textColor,
+    required this.ref,
+  });
+
+  final Message message;
+  final bool isMine;
+  final String conversationId;
+  final String recipientId;
+  final Color textColor;
+  final WidgetRef ref;
+
+  @override
+  State<_VoiceContent> createState() => _VoiceContentState();
+}
+
+class _VoiceContentState extends State<_VoiceContent> {
+  final _player = AudioPlayer();
+  bool _isPlaying = false;
+  Duration _position = Duration.zero;
+  Duration? _duration;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerStateChanged.listen((state) {
+      if (!mounted) return;
+      setState(() => _isPlaying = state == PlayerState.playing);
+    });
+    _player.onPositionChanged.listen((position) {
+      if (!mounted) return;
+      setState(() => _position = position);
+    });
+    _player.onDurationChanged.listen((duration) {
+      if (!mounted) return;
+      setState(() => _duration = duration);
+    });
+    _player.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = false;
+        _position = Duration.zero;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePlayback() async {
+    final audioUrl = widget.message.audioUrl;
+    if (audioUrl == null) return;
+    if (_isPlaying) {
+      await _player.pause();
+    } else {
+      await _player.play(UrlSource(audioUrl));
+    }
+  }
+
+  String _format(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.message.status == MessageStatus.failed) {
+      return GestureDetector(
+        onTap: widget.isMine
+            ? () => widget.ref
+                  .read(sendVoiceMessageControllerProvider.notifier)
+                  .retry(
+                    conversationId: widget.conversationId,
+                    recipientId: widget.recipientId,
+                    messageId: widget.message.id,
+                  )
+            : null,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.refresh, color: widget.textColor),
+            const SizedBox(width: 8),
+            Text('Voice message failed · Tap to retry',
+                style: TextStyle(color: widget.textColor, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    if (widget.message.status == MessageStatus.sending) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 16,
+            width: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: widget.textColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text('Sending voice message…',
+              style: TextStyle(color: widget.textColor, fontSize: 13)),
+        ],
+      );
+    }
+
+    final total =
+        _duration ??
+        Duration(seconds: widget.message.durationSeconds ?? 0);
+    final progress = total.inMilliseconds == 0
+        ? 0.0
+        : (_position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+
+    return SizedBox(
+      width: 180,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _togglePlayback,
+            child: Icon(
+              _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
+              color: widget.textColor,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 4,
+                    backgroundColor: widget.textColor.withValues(alpha: 0.25),
+                    valueColor: AlwaysStoppedAnimation(widget.textColor),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _isPlaying || _position > Duration.zero
+                      ? _format(_position)
+                      : _format(total),
+                  style: TextStyle(
+                    color: widget.textColor.withValues(alpha: 0.8),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

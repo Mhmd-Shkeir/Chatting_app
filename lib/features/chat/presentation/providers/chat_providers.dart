@@ -296,3 +296,109 @@ final sendImageMessageControllerProvider =
     AsyncNotifierProvider<SendImageMessageController, void>(
       SendImageMessageController.new,
     );
+
+/// Mirrors [SendImageMessageController] for voice messages — same
+/// pending-doc-then-upload-then-complete shape, same failure/retry path,
+/// and the recorded file is cached in [pendingImageFilesProvider] too
+/// (that class is just a messageId -> File map; nothing about it is
+/// actually image-specific despite the name).
+class SendVoiceMessageController extends AsyncNotifier<void> {
+  @override
+  Future<void> build() async {}
+
+  Future<void> send({
+    required String conversationId,
+    required String recipientId,
+    required File file,
+    required int durationSeconds,
+    ReplyPreview? replyTo,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final messageId = await ref
+          .read(chatRepositoryProvider)
+          .sendPendingVoiceMessage(
+            conversationId,
+            durationSeconds: durationSeconds,
+            replyTo: replyTo,
+          );
+      ref.read(pendingImageFilesProvider).put(messageId, file);
+      await _upload(
+        conversationId: conversationId,
+        recipientId: recipientId,
+        messageId: messageId,
+        file: file,
+      );
+    });
+  }
+
+  Future<void> retry({
+    required String conversationId,
+    required String recipientId,
+    required String messageId,
+  }) async {
+    final file = ref.read(pendingImageFilesProvider).get(messageId);
+    if (file == null) return;
+
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref
+          .read(chatRepositoryProvider)
+          .retryVoiceMessage(
+            conversationId: conversationId,
+            messageId: messageId,
+          );
+      await _upload(
+        conversationId: conversationId,
+        recipientId: recipientId,
+        messageId: messageId,
+        file: file,
+      );
+    });
+  }
+
+  Future<void> _upload({
+    required String conversationId,
+    required String recipientId,
+    required String messageId,
+    required File file,
+  }) async {
+    try {
+      final url = await ref
+          .read(imageKitRepositoryProvider)
+          .uploadImage(
+            file,
+            fileName:
+                'chat_voice_${conversationId}_${DateTime.now().millisecondsSinceEpoch}.m4a',
+          );
+      await ref
+          .read(chatRepositoryProvider)
+          .completeVoiceMessage(
+            conversationId: conversationId,
+            messageId: messageId,
+            recipientId: recipientId,
+            audioUrl: url,
+          );
+      ref.read(pendingImageFilesProvider).remove(messageId);
+      unawaited(
+        _notifyRecipient(
+          ref,
+          recipientId: recipientId,
+          conversationId: conversationId,
+          preview: 'Voice message',
+          type: 'voice',
+        ),
+      );
+    } catch (_) {
+      await ref
+          .read(chatRepositoryProvider)
+          .failVoiceMessage(conversationId: conversationId, messageId: messageId);
+      rethrow;
+    }
+  }
+}
+
+final sendVoiceMessageControllerProvider =
+    AsyncNotifierProvider<SendVoiceMessageController, void>(
+      SendVoiceMessageController.new,
+    );

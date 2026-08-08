@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum MessageStatus { sending, sent, delivered, read, failed }
 
-enum MessageType { text, image }
+enum MessageType { text, image, voice }
 
 class Message {
   const Message({
@@ -12,6 +12,8 @@ class Message {
     required this.status,
     this.type = MessageType.text,
     this.imageUrl,
+    this.audioUrl,
+    this.durationSeconds,
     this.timestamp,
     this.replyTo,
     this.reactions = const {},
@@ -24,6 +26,17 @@ class Message {
   final MessageStatus status;
   final MessageType type;
   final String? imageUrl;
+
+  /// Only set for [MessageType.voice] — the ImageKit CDN URL for the
+  /// recorded audio file (ImageKit's upload API is generic, not
+  /// image-only, despite the class name).
+  final String? audioUrl;
+
+  /// Only set for [MessageType.voice] — captured client-side while
+  /// recording, since neither `record` nor the file itself expose it
+  /// directly without decoding the audio.
+  final int? durationSeconds;
+
   final DateTime? timestamp;
   final ReplyPreview? replyTo;
 
@@ -47,6 +60,8 @@ class Message {
       status: _statusFromString(data['status'] as String?),
       type: _typeFromString(data['type'] as String?),
       imageUrl: data['imageUrl'] as String?,
+      audioUrl: data['audioUrl'] as String?,
+      durationSeconds: data['durationSeconds'] as int?,
       timestamp: (data['timestamp'] as Timestamp?)?.toDate(),
       replyTo: replyToData is Map
           ? ReplyPreview.fromMap(Map<String, dynamic>.from(replyToData))
@@ -78,7 +93,11 @@ class ReplyPreview {
   final String text;
   final MessageType type;
 
-  String get previewLabel => type == MessageType.image ? '📷 Photo' : text;
+  String get previewLabel => switch (type) {
+    MessageType.image => '📷 Photo',
+    MessageType.voice => '🎤 Voice message',
+    MessageType.text => text,
+  };
 
   factory ReplyPreview.fromMap(Map<String, dynamic> data) {
     return ReplyPreview(
@@ -93,7 +112,11 @@ class ReplyPreview {
     'messageId': messageId,
     'senderId': senderId,
     'text': text,
-    'type': type == MessageType.image ? 'image' : 'text',
+    'type': switch (type) {
+      MessageType.image => 'image',
+      MessageType.voice => 'voice',
+      MessageType.text => 'text',
+    },
   };
 
   factory ReplyPreview.fromMessage(Message message) {
@@ -125,6 +148,8 @@ MessageType _typeFromString(String? value) {
   switch (value) {
     case 'image':
       return MessageType.image;
+    case 'voice':
+      return MessageType.voice;
     default:
       return MessageType.text;
   }

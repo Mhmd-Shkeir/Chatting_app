@@ -47,6 +47,10 @@ dependencies:
   http: ^1.5.0
   shared_preferences: ^2.5.3
   flutter_local_notifications: ^18.0.1
+  record: ^6.2.1
+  audioplayers: ^6.2.0
+  path_provider: ^2.1.5
+  emoji_picker_flutter: ^4.3.0
 
 dev_dependencies:
   flutter_test:
