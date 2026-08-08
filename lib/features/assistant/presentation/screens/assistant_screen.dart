@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/lumina_mark.dart';
 import '../../data/models/assistant_message.dart';
 import '../providers/assistant_providers.dart';
 
@@ -55,7 +56,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
             CircleAvatar(
               radius: 16,
               backgroundColor: colorScheme.primaryContainer,
-              child: Icon(Icons.auto_awesome, size: 16, color: colorScheme.onPrimaryContainer),
+              child: LuminaMark(size: 18, markColor: colorScheme.onPrimaryContainer),
             ),
             const SizedBox(width: 10),
             const Text('Lumina Assistant'),
@@ -153,7 +154,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.auto_awesome, size: 40, color: colorScheme.primary),
+            LuminaMark(size: 44, markColor: colorScheme.primary),
             const SizedBox(height: 16),
             Text(
               "Hi, I'm Lumina Assistant",

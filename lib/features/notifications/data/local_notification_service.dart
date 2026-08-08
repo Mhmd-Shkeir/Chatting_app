@@ -8,7 +8,7 @@ class LocalNotificationService {
   final _plugin = FlutterLocalNotificationsPlugin();
 
   Future<void> init({required void Function(String conversationId) onTap}) async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings('@drawable/ic_notification');
     const settings = InitializationSettings(android: androidSettings);
     await _plugin.initialize(
       settings,

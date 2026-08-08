@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/lumina_mark.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../chat/presentation/providers/chat_providers.dart';
@@ -123,7 +124,7 @@ class HomeScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton(
         tooltip: 'Lumina Assistant',
         onPressed: () => context.push('/assistant'),
-        child: const Icon(Icons.auto_awesome),
+        child: LuminaMark(size: 26, markColor: Theme.of(context).colorScheme.onPrimaryContainer),
       ),
     );
   }

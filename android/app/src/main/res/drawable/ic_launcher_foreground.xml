@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground layer — the Lumina L-Mark (two rounded bars
+     forming an L, capped with a glow dot), scaled and centered within the
+     108dp canvas's 66dp safe zone so no launcher mask shape clips it.
+     Same geometry as lib/core/widgets/lumina_mark.dart's CustomPainter and
+     ic_notification.xml — keep all three in sync if this ever changes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#F8F5FC"
+        android:pathData="M44,34.91 A8.18,8.18 0 0 1 52.18,43.09 L52.18,75.82 A8.18,8.18 0 0 1 44,84 A8.18,8.18 0 0 1 35.82,75.82 L35.82,43.09 A8.18,8.18 0 0 1 44,34.91 Z" />
+    <path
+        android:fillColor="#F8F5FC"
+        android:pathData="M44,67.64 L65.82,67.64 A8.18,8.18 0 0 1 74,75.82 A8.18,8.18 0 0 1 65.82,84 L44,84 A8.18,8.18 0 0 1 35.82,75.82 A8.18,8.18 0 0 1 44,67.64 Z" />
+    <path
+        android:fillColor="#F4B740"
+        android:pathData="M34,34 A10,10 0 1 1 54,34 A10,10 0 1 1 34,34 Z" />
+</vector>

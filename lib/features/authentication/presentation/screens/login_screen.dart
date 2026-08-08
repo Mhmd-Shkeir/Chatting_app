@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/utils/firebase_error_mapper.dart';
 import '../../../../core/widgets/auth_text_field_decoration.dart';
 import '../../../../core/widgets/error_banner.dart';
+import '../../../../core/widgets/lumina_mark.dart';
 import '../../../../core/widgets/primary_loading_button.dart';
 import '../providers/auth_providers.dart';
 
@@ -79,11 +80,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           color: colorScheme.primaryContainer,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.chat_bubble_rounded,
-                          size: 34,
-                          color: colorScheme.onPrimaryContainer,
-                        ),
+                        child: LuminaMark(size: 40, markColor: colorScheme.onPrimaryContainer),
                       ),
                     ),
                     const SizedBox(height: 16),

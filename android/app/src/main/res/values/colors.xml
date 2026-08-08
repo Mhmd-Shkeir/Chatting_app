@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Native pre-Flutter-engine splash background — fixed brand "dusk",
+         not swapped for light/dark system mode (same reasoning most apps'
+         native splash uses a fixed brand color: it's on screen too briefly
+         for the swap to read as anything but a flash). The in-app
+         SplashScreen widget that takes over once Flutter loads IS fully
+         Light/Dark/System-aware. -->
+    <color name="launch_background">#17142B</color>
+</resources>
