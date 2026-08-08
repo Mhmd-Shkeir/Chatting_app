@@ -161,7 +161,7 @@ class SendMessageController extends AsyncNotifier<void> {
 
   Future<void> send({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String text,
     ReplyPreview? replyTo,
   }) async {
@@ -174,19 +174,21 @@ class SendMessageController extends AsyncNotifier<void> {
           .read(chatRepositoryProvider)
           .sendMessage(
             conversationId: conversationId,
-            recipientId: recipientId,
+            recipientIds: recipientIds,
             text: trimmed,
             replyTo: replyTo,
           );
-      unawaited(
-        _notifyRecipient(
-          ref,
-          recipientId: recipientId,
-          conversationId: conversationId,
-          preview: trimmed,
-          type: 'text',
-        ),
-      );
+      for (final recipientId in recipientIds) {
+        unawaited(
+          _notifyRecipient(
+            ref,
+            recipientId: recipientId,
+            conversationId: conversationId,
+            preview: trimmed,
+            type: 'text',
+          ),
+        );
+      }
     });
   }
 }
@@ -202,7 +204,7 @@ class SendImageMessageController extends AsyncNotifier<void> {
 
   Future<void> send({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required File file,
     ReplyPreview? replyTo,
   }) async {
@@ -214,7 +216,7 @@ class SendImageMessageController extends AsyncNotifier<void> {
       ref.read(pendingImageFilesProvider).put(messageId, file);
       await _upload(
         conversationId: conversationId,
-        recipientId: recipientId,
+        recipientIds: recipientIds,
         messageId: messageId,
         file: file,
       );
@@ -225,7 +227,7 @@ class SendImageMessageController extends AsyncNotifier<void> {
   /// still has it cached (see [PendingImageFiles]).
   Future<void> retry({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String messageId,
   }) async {
     final file = ref.read(pendingImageFilesProvider).get(messageId);
@@ -241,7 +243,7 @@ class SendImageMessageController extends AsyncNotifier<void> {
           );
       await _upload(
         conversationId: conversationId,
-        recipientId: recipientId,
+        recipientIds: recipientIds,
         messageId: messageId,
         file: file,
       );
@@ -250,7 +252,7 @@ class SendImageMessageController extends AsyncNotifier<void> {
 
   Future<void> _upload({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String messageId,
     required File file,
   }) async {
@@ -267,19 +269,21 @@ class SendImageMessageController extends AsyncNotifier<void> {
           .completeImageMessage(
             conversationId: conversationId,
             messageId: messageId,
-            recipientId: recipientId,
+            recipientIds: recipientIds,
             imageUrl: url,
           );
       ref.read(pendingImageFilesProvider).remove(messageId);
-      unawaited(
-        _notifyRecipient(
-          ref,
-          recipientId: recipientId,
-          conversationId: conversationId,
-          preview: 'Photo',
-          type: 'image',
-        ),
-      );
+      for (final recipientId in recipientIds) {
+        unawaited(
+          _notifyRecipient(
+            ref,
+            recipientId: recipientId,
+            conversationId: conversationId,
+            preview: 'Photo',
+            type: 'image',
+          ),
+        );
+      }
     } catch (_) {
       await ref
           .read(chatRepositoryProvider)
@@ -308,7 +312,7 @@ class SendVoiceMessageController extends AsyncNotifier<void> {
 
   Future<void> send({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required File file,
     required int durationSeconds,
     ReplyPreview? replyTo,
@@ -325,7 +329,7 @@ class SendVoiceMessageController extends AsyncNotifier<void> {
       ref.read(pendingImageFilesProvider).put(messageId, file);
       await _upload(
         conversationId: conversationId,
-        recipientId: recipientId,
+        recipientIds: recipientIds,
         messageId: messageId,
         file: file,
       );
@@ -334,7 +338,7 @@ class SendVoiceMessageController extends AsyncNotifier<void> {
 
   Future<void> retry({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String messageId,
   }) async {
     final file = ref.read(pendingImageFilesProvider).get(messageId);
@@ -350,7 +354,7 @@ class SendVoiceMessageController extends AsyncNotifier<void> {
           );
       await _upload(
         conversationId: conversationId,
-        recipientId: recipientId,
+        recipientIds: recipientIds,
         messageId: messageId,
         file: file,
       );
@@ -359,7 +363,7 @@ class SendVoiceMessageController extends AsyncNotifier<void> {
 
   Future<void> _upload({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String messageId,
     required File file,
   }) async {
@@ -376,19 +380,21 @@ class SendVoiceMessageController extends AsyncNotifier<void> {
           .completeVoiceMessage(
             conversationId: conversationId,
             messageId: messageId,
-            recipientId: recipientId,
+            recipientIds: recipientIds,
             audioUrl: url,
           );
       ref.read(pendingImageFilesProvider).remove(messageId);
-      unawaited(
-        _notifyRecipient(
-          ref,
-          recipientId: recipientId,
-          conversationId: conversationId,
-          preview: 'Voice message',
-          type: 'voice',
-        ),
-      );
+      for (final recipientId in recipientIds) {
+        unawaited(
+          _notifyRecipient(
+            ref,
+            recipientId: recipientId,
+            conversationId: conversationId,
+            preview: 'Voice message',
+            type: 'voice',
+          ),
+        );
+      }
     } catch (_) {
       await ref
           .read(chatRepositoryProvider)

@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
-import '../../../../core/localization/app_language.dart';
 import '../../../../core/utils/presence_formatter.dart';
 import '../../../../core/widgets/photo_source_sheet.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -122,45 +122,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
-  String? _translationTarget(AppLanguage mine, AppLanguage other) {
-    return mine == other ? null : mine.code;
-  }
-
   @override
   Widget build(BuildContext context) {
     final myUid = ref.watch(authStateChangesProvider).value?.uid;
     // Deliberately not conversationsStreamProvider (which hides a
     // cleared/deleted-from-list conversation) — this screen is explicitly
-    // open on a known conversationId and must keep resolving who the
-    // other participant is regardless of list visibility.
+    // open on a known conversationId and must keep resolving participants
+    // regardless of list visibility.
     final conversation = ref
         .watch(conversationDetailProvider(widget.conversationId))
         .value;
-    final otherUid = (myUid != null && conversation != null)
+    final isGroup = conversation?.isGroup ?? false;
+    // Every other participant — one person in a direct conversation, any
+    // number of them in a group. Feeds every send path below.
+    final recipientIds = (myUid != null && conversation != null)
+        ? conversation.otherParticipantIds(myUid)
+        : const <String>[];
+    final otherUid = (!isGroup && myUid != null && conversation != null)
         ? conversation.otherParticipantId(myUid)
         : null;
     final otherProfile = otherUid != null
         ? ref.watch(userProfileProvider(otherUid)).value
         : null;
     final myProfile = ref.watch(currentUserProfileProvider).value;
-    // Only translate incoming text when the two participants' preferred
-    // languages actually differ — a null here means "don't translate",
-    // consumed by MessageBubble below.
-    final translateToLanguageCode = (myProfile != null && otherProfile != null)
-        ? _translationTarget(
-            myProfile.preferredLanguage,
-            otherProfile.preferredLanguage,
-          )
-        : null;
+    // Consumed by MessageBubble, which does its own per-sender comparison
+    // (a group can have senders in different languages from the viewer).
+    final myLanguageCode = myProfile?.preferredLanguage.code;
     // Same reasoning as ConversationTile: participantNames is a frozen
     // snapshot that never learns about account deletion, so that has to
-    // come from the live per-uid lookup instead.
+    // come from the live per-uid lookup instead. Group-only concept aside,
+    // this only applies to direct conversations.
     final isDeleted = otherProfile?.deleted ?? false;
     final otherName = isDeleted
         ? 'Deleted Account'
         : (myUid != null && conversation != null)
         ? conversation.otherParticipantName(myUid)
         : 'Chat';
+    final participantNames = conversation?.participantNames ?? const <String, String>{};
+    String nameFor(String uid) =>
+        (myUid != null && uid == myUid) ? 'You' : (participantNames[uid] ?? 'Unknown');
+    final headerTitle = isGroup ? (conversation?.groupName ?? 'Group') : otherName;
 
     final messagesAsync = ref.watch(
       messagesStreamProvider(widget.conversationId),
@@ -168,7 +169,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final sendState = ref.watch(sendMessageControllerProvider);
     final replyingTo = ref.watch(replyingToProvider);
     // A deleted account must never be presence-listened-to at all, let
-    // alone shown as online or with a last-seen time.
+    // alone shown as online or with a last-seen time. Groups have no single
+    // presence to show at all.
     final presence = (otherUid != null && !isDeleted)
         ? ref.watch(presenceStatusProvider(otherUid)).value
         : null;
@@ -176,58 +178,78 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            UserAvatar(
-              photoUrl: otherProfile?.photoUrl,
-              displayName: otherName,
-              radius: 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(otherName, overflow: TextOverflow.ellipsis),
-                      ),
-                      if (otherUsername != null &&
-                          otherUsername.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            '@$otherUsername',
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (presence != null)
-                    Text(
-                      presence.isOnline
-                          ? 'Online'
-                          : formatLastSeen(presence.lastSeen),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                ],
+        title: GestureDetector(
+          onTap: isGroup
+              ? () => context.push('/group/${widget.conversationId}/info')
+              : null,
+          child: Row(
+            children: [
+              UserAvatar(
+                photoUrl: isGroup ? conversation?.groupAvatarUrl : otherProfile?.photoUrl,
+                displayName: headerTitle,
+                radius: 18,
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(headerTitle, overflow: TextOverflow.ellipsis),
+                        ),
+                        if (!isGroup &&
+                            otherUsername != null &&
+                            otherUsername.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '@$otherUsername',
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (isGroup)
+                      Text(
+                        '${conversation?.participants.length ?? 0} members',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else if (presence != null)
+                      Text(
+                        presence.isOnline
+                            ? 'Online'
+                            : formatLastSeen(presence.lastSeen),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           PopupMenuButton<void>(
             itemBuilder: (_) => [
+              if (isGroup)
+                PopupMenuItem<void>(
+                  onTap: () => Future(() {
+                    if (context.mounted) {
+                      context.push('/group/${widget.conversationId}/info');
+                    }
+                  }),
+                  child: const Text('Group info'),
+                ),
               PopupMenuItem<void>(
                 // Deferred to a microtask so the popup route finishes
                 // closing before the dialog opens; uses the State's own
@@ -273,13 +295,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     child: Text('No messages yet. Say hello.'),
                   );
                 }
-                if (otherUid != null) {
+                if (myUid != null) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     ref
                         .read(chatRepositoryProvider)
                         .markMessagesRead(
                           conversationId: widget.conversationId,
-                          otherUid: otherUid,
+                          myUid: myUid,
                         );
                   });
                 }
@@ -301,15 +323,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         key: _keyFor(message.id),
                         message: message,
                         isMine: message.senderId == myUid,
+                        isGroup: isGroup,
                         conversationId: widget.conversationId,
-                        recipientId: otherUid ?? '',
+                        recipientIds: recipientIds,
                         currentUserId: myUid ?? '',
-                        otherUserName: otherName,
+                        participantNames: participantNames,
                         onReplyTap: (id) =>
                             _scrollToMessage(id, visibleMessages),
                         onEdit: _startEditing,
                         isHighlighted: message.id == _highlightedMessageId,
-                        translateToLanguageCode: translateToLanguageCode,
+                        myLanguageCode: myLanguageCode,
                       );
                     },
                   ),
@@ -337,9 +360,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: ReplyPreviewStrip(
-                        senderLabel: replyingTo.senderId == myUid
-                            ? 'You'
-                            : otherName,
+                        senderLabel: nameFor(replyingTo.senderId),
                         preview: ReplyPreview.fromMessage(
                           replyingTo,
                         ).previewLabel,
@@ -355,9 +376,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.image_outlined),
-                          onPressed: otherUid == null
+                          onPressed: recipientIds.isEmpty
                               ? null
-                              : () => _sendImage(otherUid),
+                              : () => _sendImage(recipientIds),
                         ),
                         IconButton(
                           icon: Icon(
@@ -394,7 +415,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   setState(() => _showEmojiPicker = false);
                                 }
                               },
-                              onSubmitted: (_) => _send(otherUid),
+                              onSubmitted: (_) => _send(recipientIds),
                             ),
                           ),
                         ),
@@ -406,7 +427,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 _editingMessage == null) {
                               return IconButton.filled(
                                 icon: const Icon(Icons.mic),
-                                onPressed: otherUid == null
+                                onPressed: recipientIds.isEmpty
                                     ? null
                                     : _startRecording,
                               );
@@ -426,7 +447,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   : const Icon(Icons.send),
                               onPressed: sendState.isLoading
                                   ? null
-                                  : () => _send(otherUid),
+                                  : () => _send(recipientIds),
                             );
                           },
                         ),
@@ -493,7 +514,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() => _showEmojiPicker = true);
   }
 
-  Future<void> _send(String? recipientId) async {
+  Future<void> _send(List<String> recipientIds) async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
@@ -511,7 +532,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
-    if (recipientId == null) return;
+    if (recipientIds.isEmpty) return;
     final replyingTo = ref.read(replyingToProvider);
     _textController.clear();
     ref.read(replyingToProvider.notifier).clear();
@@ -519,7 +540,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .read(sendMessageControllerProvider.notifier)
         .send(
           conversationId: widget.conversationId,
-          recipientId: recipientId,
+          recipientIds: recipientIds,
           text: text,
           replyTo: replyingTo == null
               ? null
@@ -569,7 +590,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Future<void> _sendImage(String recipientId) async {
+  Future<void> _sendImage(List<String> recipientIds) async {
     final action = await showModalBottomSheet<PhotoSourceAction>(
       context: context,
       builder: (context) => const PhotoSourceSheet(),
@@ -592,7 +613,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .read(sendImageMessageControllerProvider.notifier)
         .send(
           conversationId: widget.conversationId,
-          recipientId: recipientId,
+          recipientIds: recipientIds,
           file: File(picked.path),
           replyTo: replyingTo == null
               ? null
@@ -647,10 +668,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _stopAndSendRecording() async {
-    final recipientId = ref
+    final myUid = ref.read(authStateChangesProvider).value?.uid;
+    final conversation = ref
         .read(conversationDetailProvider(widget.conversationId))
-        .value
-        ?.otherParticipantId(ref.read(authStateChangesProvider).value?.uid ?? '');
+        .value;
+    final recipientIds = (myUid != null && conversation != null)
+        ? conversation.otherParticipantIds(myUid)
+        : const <String>[];
     _recordTimer?.cancel();
     final path = await _recorder.stop();
     final duration = _recordSeconds;
@@ -661,7 +685,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
 
     final resolvedPath = path ?? _recordingPath;
-    if (resolvedPath == null || recipientId == null || duration < 1) return;
+    if (resolvedPath == null || recipientIds.isEmpty || duration < 1) return;
 
     final replyingTo = ref.read(replyingToProvider);
     ref.read(replyingToProvider.notifier).clear();
@@ -669,7 +693,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .read(sendVoiceMessageControllerProvider.notifier)
         .send(
           conversationId: widget.conversationId,
-          recipientId: recipientId,
+          recipientIds: recipientIds,
           file: File(resolvedPath),
           durationSeconds: duration,
           replyTo: replyingTo == null

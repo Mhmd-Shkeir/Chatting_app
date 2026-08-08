@@ -31,7 +31,7 @@ class ChatRepository {
   /// preview out of sync.
   Future<void> sendMessage({
     required String conversationId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String text,
     ReplyPreview? replyTo,
   }) async {
@@ -57,7 +57,8 @@ class ChatRepository {
       'lastMessageSenderId': senderId,
       'lastMessageTimestamp': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'unreadCounts.$recipientId': FieldValue.increment(1),
+      for (final recipientId in recipientIds)
+        'unreadCounts.$recipientId': FieldValue.increment(1),
     });
 
     await batch.commit();
@@ -101,7 +102,7 @@ class ChatRepository {
   Future<void> completeImageMessage({
     required String conversationId,
     required String messageId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String imageUrl,
   }) async {
     final senderId = _auth.currentUser!.uid;
@@ -117,7 +118,8 @@ class ChatRepository {
       'lastMessageSenderId': senderId,
       'lastMessageTimestamp': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'unreadCounts.$recipientId': FieldValue.increment(1),
+      for (final recipientId in recipientIds)
+        'unreadCounts.$recipientId': FieldValue.increment(1),
     });
     await batch.commit();
   }
@@ -158,7 +160,7 @@ class ChatRepository {
   Future<void> completeVoiceMessage({
     required String conversationId,
     required String messageId,
-    required String recipientId,
+    required List<String> recipientIds,
     required String audioUrl,
   }) async {
     final senderId = _auth.currentUser!.uid;
@@ -174,7 +176,8 @@ class ChatRepository {
       'lastMessageSenderId': senderId,
       'lastMessageTimestamp': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'unreadCounts.$recipientId': FieldValue.increment(1),
+      for (final recipientId in recipientIds)
+        'unreadCounts.$recipientId': FieldValue.increment(1),
     });
     await batch.commit();
   }
@@ -344,7 +347,7 @@ class ChatRepository {
   /// chat apps' "forward" semantics, as opposed to a reply).
   Future<void> forwardMessage({
     required String targetConversationId,
-    required String targetRecipientId,
+    required List<String> targetRecipientIds,
     required Message message,
   }) async {
     final senderId = _auth.currentUser!.uid;
@@ -378,7 +381,8 @@ class ChatRepository {
       'lastMessageSenderId': senderId,
       'lastMessageTimestamp': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'unreadCounts.$targetRecipientId': FieldValue.increment(1),
+      for (final targetRecipientId in targetRecipientIds)
+        'unreadCounts.$targetRecipientId': FieldValue.increment(1),
     });
     await batch.commit();
   }
@@ -390,32 +394,34 @@ class ChatRepository {
     });
   }
 
-  /// Upgrades sent -> delivered for messages from [otherUid]. Called whenever
-  /// this client observes the conversation update at all (not just when the
-  /// chat screen is open), since "delivered" means the message reached this
-  /// device — reusing the conversations stream that's already active for the
-  /// whole session avoids standing up a separate background listener.
+  /// Upgrades sent -> delivered for every message not sent by [myUid] (i.e.
+  /// from any other participant — one other person in a direct conversation,
+  /// any number of them in a group). Called whenever this client observes
+  /// the conversation update at all (not just when the chat screen is
+  /// open), since "delivered" means the message reached this device —
+  /// reusing the conversations stream that's already active for the whole
+  /// session avoids standing up a separate background listener.
   Future<void> markMessagesDelivered({
     required String conversationId,
-    required String otherUid,
+    required String myUid,
   }) {
     return _updateMessagesFrom(
       conversationId: conversationId,
-      otherUid: otherUid,
+      myUid: myUid,
       matches: (status) => status == 'sent',
       newStatus: 'delivered',
     );
   }
 
-  /// Upgrades sent/delivered -> read for messages from [otherUid]. Called
-  /// only when the recipient actually opens this specific chat.
+  /// Upgrades sent/delivered -> read for every message not sent by [myUid].
+  /// Called only when the recipient actually opens this specific chat.
   Future<void> markMessagesRead({
     required String conversationId,
-    required String otherUid,
+    required String myUid,
   }) {
     return _updateMessagesFrom(
       conversationId: conversationId,
-      otherUid: otherUid,
+      myUid: myUid,
       matches: (status) => status != 'read',
       newStatus: 'read',
     );
@@ -423,7 +429,7 @@ class ChatRepository {
 
   Future<void> _updateMessagesFrom({
     required String conversationId,
-    required String otherUid,
+    required String myUid,
     required bool Function(String? status) matches,
     required String newStatus,
   }) async {
@@ -431,7 +437,7 @@ class ChatRepository {
         .collection('conversations')
         .doc(conversationId)
         .collection('messages')
-        .where('senderId', isEqualTo: otherUid)
+        .where('senderId', isNotEqualTo: myUid)
         .get();
 
     final pending = snapshot.docs.where(

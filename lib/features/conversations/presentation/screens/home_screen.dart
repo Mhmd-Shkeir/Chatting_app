@@ -31,6 +31,11 @@ class HomeScreen extends ConsumerWidget {
         title: const Text('Lumina Chat'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.group_add_outlined),
+            tooltip: 'New group',
+            onPressed: () => context.push('/new-group'),
+          ),
+          IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => context.push('/search'),
           ),
@@ -92,7 +97,7 @@ class HomeScreen extends ConsumerWidget {
                           .read(chatRepositoryProvider)
                           .markMessagesDelivered(
                             conversationId: conversation.id,
-                            otherUid: senderId,
+                            myUid: myUid,
                           );
                     }
                   }
@@ -115,6 +120,11 @@ class HomeScreen extends ConsumerWidget {
                 );
               },
             ),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Lumina Assistant',
+        onPressed: () => context.push('/assistant'),
+        child: const Icon(Icons.auto_awesome),
+      ),
     );
   }
 }

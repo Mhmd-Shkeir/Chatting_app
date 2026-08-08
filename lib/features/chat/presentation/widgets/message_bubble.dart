@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
 import '../screens/image_viewer_screen.dart';
@@ -17,32 +18,42 @@ class MessageBubble extends ConsumerWidget {
   const MessageBubble({
     required this.message,
     required this.isMine,
+    required this.isGroup,
     required this.conversationId,
-    required this.recipientId,
+    required this.recipientIds,
     required this.currentUserId,
-    required this.otherUserName,
+    required this.participantNames,
     this.onReplyTap,
     this.onEdit,
     this.isHighlighted = false,
-    this.translateToLanguageCode,
+    this.myLanguageCode,
     super.key,
   });
 
   final Message message;
   final bool isMine;
+  final bool isGroup;
   final String conversationId;
-  final String recipientId;
+  final List<String> recipientIds;
   final String currentUserId;
-  final String otherUserName;
+
+  /// uid -> display name for every participant — the frozen conversation
+  /// snapshot, same one the conversation list/header use. Drives reply
+  /// attribution ("You" / sender name) and, in a group, the sender label
+  /// shown above a bubble that isn't mine.
+  final Map<String, String> participantNames;
   final ValueChanged<String>? onReplyTap;
   final ValueChanged<Message>? onEdit;
   final bool isHighlighted;
 
-  /// Non-null when the viewer's preferred language differs from the
-  /// sender's — see ChatScreen._translationTarget. Only applied to
-  /// messages that aren't mine; translating your own sent text back to
-  /// yourself makes no sense.
-  final String? translateToLanguageCode;
+  /// The viewer's own preferred-language code. When set, a live per-sender
+  /// lookup (below) decides whether to offer translation — per-message
+  /// rather than per-conversation, since a group can have senders in
+  /// different languages from each other and from the viewer.
+  final String? myLanguageCode;
+
+  String _nameFor(String uid) =>
+      uid == currentUserId ? 'You' : (participantNames[uid] ?? 'Unknown');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -50,8 +61,14 @@ class MessageBubble extends ConsumerWidget {
     final isImage = message.type == MessageType.image;
     final isVoice = message.type == MessageType.voice;
     final replyTo = message.replyTo;
-    final needsTranslation =
-        !isMine && !isImage && !isVoice && translateToLanguageCode != null;
+    final senderLanguageCode = (!isMine && myLanguageCode != null)
+        ? ref.watch(userProfileProvider(message.senderId)).value?.preferredLanguage.code
+        : null;
+    final needsTranslation = !isMine &&
+        !isImage &&
+        !isVoice &&
+        senderLanguageCode != null &&
+        senderLanguageCode != myLanguageCode;
 
     final timestampColor =
         (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(
@@ -89,6 +106,18 @@ class MessageBubble extends ConsumerWidget {
               : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (isGroup && !isMine && !message.deletedForEveryone)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, bottom: 2),
+                child: Text(
+                  _nameFor(message.senderId),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ),
             AnimatedContainer(
               duration: const Duration(milliseconds: 400),
               margin: const EdgeInsets.symmetric(vertical: 3),
@@ -110,9 +139,7 @@ class MessageBubble extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: ReplyPreviewStrip(
-                        senderLabel: replyTo.senderId == currentUserId
-                            ? 'You'
-                            : otherUserName,
+                        senderLabel: _nameFor(replyTo.senderId),
                         preview: replyTo.previewLabel,
                         onTap: onReplyTap == null
                             ? null
@@ -157,7 +184,7 @@ class MessageBubble extends ConsumerWidget {
                       message: message,
                       isMine: isMine,
                       conversationId: conversationId,
-                      recipientId: recipientId,
+                      recipientIds: recipientIds,
                       ref: ref,
                     )
                   else if (isVoice)
@@ -165,7 +192,7 @@ class MessageBubble extends ConsumerWidget {
                       message: message,
                       isMine: isMine,
                       conversationId: conversationId,
-                      recipientId: recipientId,
+                      recipientIds: recipientIds,
                       textColor: isMine
                           ? colorScheme.onPrimary
                           : colorScheme.onSurface,
@@ -175,7 +202,7 @@ class MessageBubble extends ConsumerWidget {
                     _TranslatableText(
                       message: message,
                       conversationId: conversationId,
-                      targetLanguageCode: translateToLanguageCode!,
+                      targetLanguageCode: myLanguageCode!,
                       textColor: colorScheme.onSurface,
                     )
                   else
@@ -249,14 +276,14 @@ class _ImageContent extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.conversationId,
-    required this.recipientId,
+    required this.recipientIds,
     required this.ref,
   });
 
   final Message message;
   final bool isMine;
   final String conversationId;
-  final String recipientId;
+  final List<String> recipientIds;
   final WidgetRef ref;
 
   static const double _size = 220;
@@ -273,7 +300,7 @@ class _ImageContent extends StatelessWidget {
                   .read(sendImageMessageControllerProvider.notifier)
                   .retry(
                     conversationId: conversationId,
-                    recipientId: recipientId,
+                    recipientIds: recipientIds,
                     messageId: message.id,
                   )
             : null,
@@ -372,7 +399,7 @@ class _VoiceContent extends StatefulWidget {
     required this.message,
     required this.isMine,
     required this.conversationId,
-    required this.recipientId,
+    required this.recipientIds,
     required this.textColor,
     required this.ref,
   });
@@ -380,7 +407,7 @@ class _VoiceContent extends StatefulWidget {
   final Message message;
   final bool isMine;
   final String conversationId;
-  final String recipientId;
+  final List<String> recipientIds;
   final Color textColor;
   final WidgetRef ref;
 
@@ -449,7 +476,7 @@ class _VoiceContentState extends State<_VoiceContent> {
                   .read(sendVoiceMessageControllerProvider.notifier)
                   .retry(
                     conversationId: widget.conversationId,
-                    recipientId: widget.recipientId,
+                    recipientIds: widget.recipientIds,
                     messageId: widget.message.id,
                   )
             : null,

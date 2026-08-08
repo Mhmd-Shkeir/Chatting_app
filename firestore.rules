@@ -33,9 +33,13 @@ service cloud.firestore {
       allow list, update: if request.auth != null
         && request.auth.uid in resource.data.participants;
 
+      // >= 2 covers both a direct conversation (exactly 2) and a group
+      // (creator + at least one member) at creation time. Adding members
+      // to a group later is just another participants/participantNames
+      // update, already covered by the `update` rule above.
       allow create: if request.auth != null
         && request.auth.uid in request.resource.data.participants
-        && request.resource.data.participants.size() == 2;
+        && request.resource.data.participants.size() >= 2;
 
       match /messages/{messageId} {
         allow read: if request.auth != null

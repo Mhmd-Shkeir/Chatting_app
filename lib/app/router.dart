@@ -10,7 +10,10 @@ import '../features/authentication/presentation/providers/auth_providers.dart';
 import '../features/authentication/presentation/screens/login_screen.dart';
 import '../features/authentication/presentation/screens/register_screen.dart';
 import '../features/authentication/presentation/screens/verify_email_screen.dart';
+import '../features/assistant/presentation/screens/assistant_screen.dart';
 import '../features/chat/presentation/screens/chat_screen.dart';
+import '../features/conversations/presentation/screens/create_group_screen.dart';
+import '../features/conversations/presentation/screens/group_info_screen.dart';
 import '../features/conversations/presentation/screens/home_screen.dart';
 import '../features/profile/presentation/providers/profile_providers.dart';
 import '../features/profile/presentation/screens/choose_username_screen.dart';
@@ -200,6 +203,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/chat/:conversationId',
         builder: (context, state) =>
             ChatScreen(conversationId: state.pathParameters['conversationId']!),
+      ),
+      GoRoute(
+        path: '/new-group',
+        builder: (context, state) => const CreateGroupScreen(),
+      ),
+      GoRoute(
+        path: '/group/:conversationId/info',
+        builder: (context, state) =>
+            GroupInfoScreen(conversationId: state.pathParameters['conversationId']!),
+      ),
+      GoRoute(
+        path: '/assistant',
+        builder: (context, state) => const AssistantScreen(),
       ),
     ],
   );

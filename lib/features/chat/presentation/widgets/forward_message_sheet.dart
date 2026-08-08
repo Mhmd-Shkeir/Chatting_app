@@ -9,9 +9,8 @@ import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
 
 /// Picks a target conversation to forward [message] into — a flat list of
-/// the sender's existing conversations, reusing conversationsStreamProvider
-/// rather than a new query. Group chats aren't a thing yet, so this is
-/// literally "who do you want to send this to."
+/// the sender's existing conversations (direct or group), reusing
+/// conversationsStreamProvider rather than a new query.
 Future<void> showForwardMessageSheet(
   BuildContext context, {
   required WidgetRef ref,
@@ -62,27 +61,27 @@ class _ForwardSheet extends ConsumerWidget {
                     itemCount: conversations.length,
                     itemBuilder: (context, index) {
                       final conversation = conversations[index];
-                      final otherUid = conversation.otherParticipantId(myUid);
-                      final otherName = conversation.otherParticipantName(myUid);
+                      final targetRecipientIds = conversation.otherParticipantIds(myUid);
+                      final displayName = conversation.displayNameFor(myUid);
                       return ListTile(
                         leading: UserAvatar(
-                          photoUrl: null,
-                          displayName: otherName,
+                          photoUrl: conversation.isGroup ? conversation.groupAvatarUrl : null,
+                          displayName: displayName,
                           radius: 20,
                         ),
-                        title: Text(otherName),
+                        title: Text(displayName),
                         onTap: () async {
                           Navigator.of(context).pop();
                           try {
                             await ref.read(chatRepositoryProvider).forwardMessage(
                                   targetConversationId: conversation.id,
-                                  targetRecipientId: otherUid,
+                                  targetRecipientIds: targetRecipientIds,
                                   message: message,
                                 );
                             rootScaffoldMessengerKey.currentState
                               ?..hideCurrentSnackBar()
                               ..showSnackBar(
-                                SnackBar(content: Text('Forwarded to $otherName')),
+                                SnackBar(content: Text('Forwarded to $displayName')),
                               );
                           } catch (_) {
                             rootScaffoldMessengerKey.currentState

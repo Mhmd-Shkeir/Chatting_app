@@ -24,20 +24,30 @@ class ConversationTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unread = conversation.unreadCountFor(myUid);
-    final otherUid = conversation.otherParticipantId(myUid);
-    final otherProfile = ref.watch(userProfileProvider(otherUid)).value;
+    final isGroup = conversation.isGroup;
+    // Group has no single "other participant" — everything below that
+    // depends on one (presence, live deletion status, @username) is a
+    // direct-only concept.
+    final otherUid = isGroup ? null : conversation.otherParticipantId(myUid);
+    final otherProfile = otherUid != null
+        ? ref.watch(userProfileProvider(otherUid)).value
+        : null;
     // participantNames is a frozen snapshot from when the conversation was
     // created (see conversation_repository.dart) — it never learns that
     // the other person deleted their account, so that has to come from
     // the same live per-uid lookup already used for @username.
     final isDeleted = otherProfile?.deleted ?? false;
-    final name = isDeleted ? 'Deleted Account' : conversation.otherParticipantName(myUid);
+    final name = isGroup
+        ? conversation.displayNameFor(myUid)
+        : (isDeleted ? 'Deleted Account' : conversation.otherParticipantName(myUid));
     // A deleted account must never show as online — gated ahead of the
     // watch itself, not just the rendering below, so a deleted account is
-    // never presence-listened-to in the first place.
-    final isOnline =
-        isDeleted ? false : ref.watch(presenceStatusProvider(otherUid)).value?.isOnline ?? false;
-    final username = otherProfile?.username;
+    // never presence-listened-to in the first place. Groups have no single
+    // presence to show at all.
+    final isOnline = (isGroup || isDeleted || otherUid == null)
+        ? false
+        : ref.watch(presenceStatusProvider(otherUid)).value?.isOnline ?? false;
+    final username = isGroup ? null : otherProfile?.username;
     final colorScheme = Theme.of(context).colorScheme;
     final hasUnread = unread > 0;
 
@@ -48,7 +58,10 @@ class ConversationTile extends ConsumerWidget {
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
-          UserAvatar(photoUrl: otherProfile?.photoUrl, displayName: name),
+          UserAvatar(
+            photoUrl: isGroup ? conversation.groupAvatarUrl : otherProfile?.photoUrl,
+            displayName: name,
+          ),
           if (isOnline)
             Positioned(
               right: -1,

@@ -98,4 +98,90 @@ class ConversationRepository {
 
     return conversationId;
   }
+
+  /// Group conversations can't reuse the deterministic sorted-uids ID
+  /// scheme above — membership changes over time, so there's no fixed key
+  /// to derive it from. Gets a fresh auto-generated doc ID instead.
+  /// [memberNames] is uid -> display name for every member other than the
+  /// creator, mirroring participantNames' shape.
+  Future<String> createGroup({
+    required String name,
+    String? avatarUrl,
+    required Map<String, String> memberNames,
+  }) async {
+    final me = _auth.currentUser!;
+    final ref = _firestore.collection('conversations').doc();
+    final participants = <String>{me.uid, ...memberNames.keys}.toList();
+    final participantNames = {
+      me.uid: me.displayName ?? '',
+      ...memberNames,
+    };
+
+    await ref.set({
+      'id': ref.id,
+      'type': 'group',
+      'groupName': name,
+      'groupAvatarUrl': avatarUrl,
+      'admins': [me.uid],
+      'createdBy': me.uid,
+      'participants': participants,
+      'participantNames': participantNames,
+      'lastMessage': null,
+      'lastMessageSenderId': null,
+      'lastMessageTimestamp': FieldValue.serverTimestamp(),
+      'unreadCounts': {for (final p in participants) p: 0},
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    return ref.id;
+  }
+
+  /// Adds members to an existing group — dot-path writes to
+  /// participantNames/unreadCounts plus an arrayUnion on participants, same
+  /// ownership shape as the rest of this app's per-uid map updates (see
+  /// setReaction/deleteMessageForMe). Covered by the existing permissive
+  /// conversation-update rule (any current participant may update), no
+  /// rules change needed.
+  Future<void> addMembers({
+    required String conversationId,
+    required Map<String, String> memberNames,
+  }) async {
+    final updates = <String, Object?>{
+      'participants': FieldValue.arrayUnion(memberNames.keys.toList()),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    for (final entry in memberNames.entries) {
+      updates['participantNames.${entry.key}'] = entry.value;
+      updates['unreadCounts.${entry.key}'] = 0;
+    }
+    await _firestore.collection('conversations').doc(conversationId).update(updates);
+  }
+
+  /// Removes [uid] from a group's participants (and, if present, admins) —
+  /// gated to admins in the UI (see GroupInfoScreen); enforcement stops at
+  /// the client, same as every other field on this doc (the conversation
+  /// `update` rule stays permissive for any current participant). Also
+  /// used by [leaveGroup], which just targets the caller.
+  Future<void> removeMember({
+    required String conversationId,
+    required String uid,
+  }) async {
+    await _firestore.collection('conversations').doc(conversationId).update({
+      'participants': FieldValue.arrayRemove([uid]),
+      'admins': FieldValue.arrayRemove([uid]),
+      'participantNames.$uid': FieldValue.delete(),
+      'unreadCounts.$uid': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Removes the caller from a group — available to any member, including
+  /// the creator. If the creator leaves, the group is left with no admins
+  /// (promoting a replacement admin is deferred, same as the rest of the
+  /// admin feature set).
+  Future<void> leaveGroup(String conversationId) {
+    final uid = _auth.currentUser!.uid;
+    return removeMember(conversationId: conversationId, uid: uid);
+  }
 }
