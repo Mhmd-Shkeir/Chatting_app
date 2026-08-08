@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/localization/app_language.dart';
 import '../../../../core/utils/presence_formatter.dart';
 import '../../../../core/widgets/photo_source_sheet.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -117,6 +118,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return null;
   }
 
+  String? _translationTarget(AppLanguage mine, AppLanguage other) {
+    return mine == other ? null : mine.code;
+  }
+
   @override
   Widget build(BuildContext context) {
     final myUid = ref.watch(authStateChangesProvider).value?.uid;
@@ -127,6 +132,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : null;
     final otherProfile = otherUid != null
         ? ref.watch(userProfileProvider(otherUid)).value
+        : null;
+    final myProfile = ref.watch(currentUserProfileProvider).value;
+    // Only translate incoming text when the two participants' preferred
+    // languages actually differ — a null here means "don't translate",
+    // consumed by MessageBubble below.
+    final translateToLanguageCode = (myProfile != null && otherProfile != null)
+        ? _translationTarget(
+            myProfile.preferredLanguage,
+            otherProfile.preferredLanguage,
+          )
         : null;
     // Same reasoning as ConversationTile: participantNames is a frozen
     // snapshot that never learns about account deletion, so that has to
@@ -249,6 +264,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         otherUserName: otherName,
                         onReplyTap: (id) => _scrollToMessage(id, messages),
                         isHighlighted: message.id == _highlightedMessageId,
+                        translateToLanguageCode: translateToLanguageCode,
                       );
                     },
                   ),

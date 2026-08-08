@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../../core/localization/app_language.dart';
+
 class AppUser {
   const AppUser({
     required this.uid,
@@ -14,6 +16,8 @@ class AppUser {
     this.lastSeen,
     this.isOnline = false,
     this.deleted = false,
+    this.preferredLanguage = AppLanguage.english,
+    this.fcmToken,
   });
 
   final String uid;
@@ -28,6 +32,12 @@ class AppUser {
   final DateTime? lastSeen;
   final bool isOnline;
   final bool deleted;
+  final AppLanguage preferredLanguage;
+
+  /// This device's current FCM registration token, if any — see
+  /// ProfileRepository.updateFcmToken. Used only to address a push
+  /// notification to this user; never displayed or compared for identity.
+  final String? fcmToken;
 
   bool get hasUsername => username != null && username!.isNotEmpty;
 
@@ -45,6 +55,10 @@ class AppUser {
       lastSeen: (data['lastSeen'] as Timestamp?)?.toDate(),
       isOnline: data['isOnline'] as bool? ?? false,
       deleted: data['deleted'] as bool? ?? false,
+      preferredLanguage: AppLanguage.fromCode(
+        data['preferredLanguage'] as String?,
+      ),
+      fcmToken: data['fcmToken'] as String?,
     );
   }
 }

@@ -16,6 +16,7 @@ import '../features/profile/presentation/providers/profile_providers.dart';
 import '../features/profile/presentation/screens/choose_username_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/search/presentation/screens/user_search_screen.dart';
+import '../features/settings/presentation/screens/settings_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = _RouterRefreshNotifier();
@@ -40,7 +41,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     // resolving a single navigation) — triggering side effects from inside
     // redirect() previously corrupted the session badly enough to block
     // every subsequent login until the app restarted.
-    final tombstonedUid = (next.value?.deleted ?? false) ? next.value?.uid : null;
+    final tombstonedUid = (next.value?.deleted ?? false)
+        ? next.value?.uid
+        : null;
     if (tombstonedUid == null || isFinishingAccountDeletion) return;
 
     // ProfileController.deleteAccount() sets its state to loading before
@@ -147,31 +150,56 @@ final routerProvider = Provider<GoRouter>((ref) {
       // session no matter how it was re-read after reload(); userChanges()
       // is the stream Firebase documents as reliably emitting the
       // refreshed user once reload() completes.
-      final isEmailVerified = ref.read(userChangesProvider).value?.emailVerified ?? false;
+      final isEmailVerified =
+          ref.read(userChangesProvider).value?.emailVerified ?? false;
       final isVerifyEmailRoute = path == '/verify-email';
 
       if (!isEmailVerified) {
         return isVerifyEmailRoute ? null : '/verify-email';
       }
 
-      return (isAuthRoute || path == '/splash' || isOnboardingRoute || isVerifyEmailRoute)
+      return (isAuthRoute ||
+              path == '/splash' ||
+              isOnboardingRoute ||
+              isVerifyEmailRoute)
           ? '/home'
           : null;
     },
     routes: [
-      GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-      GoRoute(path: '/register', builder: (context, state) => const RegisterScreen()),
-      GoRoute(path: '/choose-username', builder: (context, state) => const ChooseUsernameScreen()),
-      GoRoute(path: '/verify-email', builder: (context, state) => const VerifyEmailScreen()),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/choose-username',
+        builder: (context, state) => const ChooseUsernameScreen(),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (context, state) => const VerifyEmailScreen(),
+      ),
       GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
-      GoRoute(path: '/search', builder: (context, state) => const UserSearchScreen()),
-      GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) => const UserSearchScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
       GoRoute(
         path: '/chat/:conversationId',
-        builder: (context, state) => ChatScreen(
-          conversationId: state.pathParameters['conversationId']!,
-        ),
+        builder: (context, state) =>
+            ChatScreen(conversationId: state.pathParameters['conversationId']!),
       ),
     ],
   );

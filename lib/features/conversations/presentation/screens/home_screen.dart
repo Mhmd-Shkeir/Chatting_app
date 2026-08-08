@@ -26,7 +26,7 @@ class HomeScreen extends ConsumerWidget {
             displayName: myProfile?.displayName ?? '',
             radius: 16,
           ),
-          onPressed: () => context.push('/profile'),
+          onPressed: () => context.push('/settings'),
         ),
         title: const Text('Lumina Chat'),
         actions: [
@@ -40,7 +40,8 @@ class HomeScreen extends ConsumerWidget {
           ? const SizedBox.shrink()
           : conversationsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(child: Text('Something went wrong: $error')),
+              error: (error, _) =>
+                  Center(child: Text('Something went wrong: $error')),
               data: (conversations) {
                 if (conversations.isEmpty) {
                   return Center(
@@ -52,7 +53,9 @@ class HomeScreen extends ConsumerWidget {
                           Icon(
                             Icons.chat_bubble_outline,
                             size: 48,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -63,8 +66,11 @@ class HomeScreen extends ConsumerWidget {
                           Text(
                             'Search for someone to start chatting.',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                         ],
@@ -82,7 +88,9 @@ class HomeScreen extends ConsumerWidget {
                   for (final conversation in conversations) {
                     final senderId = conversation.lastMessageSenderId;
                     if (senderId != null && senderId != myUid) {
-                      ref.read(chatRepositoryProvider).markMessagesDelivered(
+                      ref
+                          .read(chatRepositoryProvider)
+                          .markMessagesDelivered(
                             conversationId: conversation.id,
                             otherUid: senderId,
                           );
@@ -92,7 +100,8 @@ class HomeScreen extends ConsumerWidget {
 
                 return ListView.separated(
                   itemCount: conversations.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1, indent: 72),
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 1, indent: 72),
                   itemBuilder: (context, index) {
                     final conversation = conversations[index];
                     return ConversationTile(

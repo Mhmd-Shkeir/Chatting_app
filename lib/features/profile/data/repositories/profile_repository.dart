@@ -2,20 +2,34 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../../core/errors/username_taken_exception.dart';
+import '../../../../core/localization/app_language.dart';
 import '../../../authentication/data/models/app_user.dart';
 
 class ProfileRepository {
   ProfileRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
   Stream<AppUser?> watchUser(String uid) {
-    return _firestore.collection('users').doc(uid).snapshots().map(
-          (doc) => doc.exists ? AppUser.fromFirestore(doc.data()!, doc.id) : null,
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map(
+          (doc) =>
+              doc.exists ? AppUser.fromFirestore(doc.data()!, doc.id) : null,
         );
+  }
+
+  /// A one-off read, for callers (like the push-notification trigger) that
+  /// just need a snapshot of another user's profile and shouldn't stand up
+  /// a live subscription for it.
+  Future<AppUser?> getUser(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    return doc.exists ? AppUser.fromFirestore(doc.data()!, doc.id) : null;
   }
 
   Future<void> updateDisplayName(String displayName) async {
@@ -36,7 +50,31 @@ class ProfileRepository {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    await _firestore.collection('users').doc(user.uid).update({'photoUrl': photoUrl});
+    await _firestore.collection('users').doc(user.uid).update({
+      'photoUrl': photoUrl,
+    });
+  }
+
+  Future<void> updatePreferredLanguage(AppLanguage language) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    await _firestore.collection('users').doc(user.uid).update({
+      'preferredLanguage': language.code,
+    });
+  }
+
+  /// Registers (or clears, on sign-out/token invalidation) this device's FCM
+  /// registration token so other users' sends can look it up to push a
+  /// notification. Not the message-read source of truth for anything else —
+  /// purely a delivery address.
+  Future<void> updateFcmToken(String? token) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    await _firestore.collection('users').doc(user.uid).update({
+      'fcmToken': token,
+    });
   }
 
   /// Firebase requires a recent sign-in before it will allow deleting the
@@ -47,7 +85,10 @@ class ProfileRepository {
     final email = user?.email;
     if (user == null || email == null) return;
 
-    final credential = EmailAuthProvider.credential(email: email, password: password);
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: password,
+    );
     await user.reauthenticateWithCredential(credential);
   }
 
@@ -71,6 +112,7 @@ class ProfileRepository {
       'usernameLower': null,
       'photoUrl': null,
       'bio': null,
+      'preferredLanguage': null,
       'isOnline': false,
       'lastSeen': null,
       'fcmToken': null,
@@ -92,7 +134,9 @@ class ProfileRepository {
     // timeout and can still sync later on its own, which is exactly the
     // "tombstoned but not yet Auth-deleted" state router.dart's self-heal
     // is designed to finish on a later launch.
-    await _firestore.waitForPendingWrites().timeout(const Duration(seconds: 15));
+    await _firestore.waitForPendingWrites().timeout(
+      const Duration(seconds: 15),
+    );
   }
 
   /// For an existing account claiming a username for the first time

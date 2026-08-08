@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/localization/app_language.dart';
 import '../../../authentication/data/models/app_user.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
@@ -99,7 +100,9 @@ Future<void> finishAccountDeletion(Ref ref, String uid) async {
   Object? lastError;
   for (var attempt = 0; attempt < 3; attempt++) {
     try {
-      await authRepository.deleteAccount(uid).timeout(const Duration(seconds: 10));
+      await authRepository
+          .deleteAccount(uid)
+          .timeout(const Duration(seconds: 10));
       return;
     } catch (error) {
       lastError = error;
@@ -130,7 +133,9 @@ class ProfileController extends AsyncNotifier<void> {
   Future<void> updateProfilePhoto(XFile file) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      final url = await ref.read(imageKitRepositoryProvider).uploadImage(File(file.path));
+      final url = await ref
+          .read(imageKitRepositoryProvider)
+          .uploadImage(File(file.path));
       await ref.read(profileRepositoryProvider).updatePhotoUrl(url);
     });
   }
@@ -139,6 +144,15 @@ class ProfileController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() {
       return ref.read(profileRepositoryProvider).updatePhotoUrl(null);
+    });
+  }
+
+  Future<void> updatePreferredLanguage(AppLanguage language) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() {
+      return ref
+          .read(profileRepositoryProvider)
+          .updatePreferredLanguage(language);
     });
   }
 
@@ -171,6 +185,5 @@ class ProfileController extends AsyncNotifier<void> {
   }
 }
 
-final profileControllerProvider = AsyncNotifierProvider<ProfileController, void>(
-  ProfileController.new,
-);
+final profileControllerProvider =
+    AsyncNotifierProvider<ProfileController, void>(ProfileController.new);

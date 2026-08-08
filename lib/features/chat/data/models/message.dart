@@ -14,6 +14,8 @@ class Message {
     this.imageUrl,
     this.timestamp,
     this.replyTo,
+    this.reactions = const {},
+    this.translations = const {},
   });
 
   final String id;
@@ -25,8 +27,19 @@ class Message {
   final DateTime? timestamp;
   final ReplyPreview? replyTo;
 
+  /// Uid -> emoji, one entry per user who reacted (at most one reaction each).
+  final Map<String, String> reactions;
+
+  /// Language code -> translated text, populated lazily the first time
+  /// someone whose preferred language differs from the sender's views this
+  /// message, and cached here so later views (any participant, any device)
+  /// don't re-call the translation API. [text] itself is never overwritten.
+  final Map<String, String> translations;
+
   factory Message.fromFirestore(Map<String, dynamic> data, String id) {
     final replyToData = data['replyTo'];
+    final reactionsData = data['reactions'];
+    final translationsData = data['translations'];
     return Message(
       id: id,
       senderId: data['senderId'] as String? ?? '',
@@ -38,6 +51,12 @@ class Message {
       replyTo: replyToData is Map
           ? ReplyPreview.fromMap(Map<String, dynamic>.from(replyToData))
           : null,
+      reactions: reactionsData is Map
+          ? Map<String, String>.from(reactionsData)
+          : const {},
+      translations: translationsData is Map
+          ? Map<String, String>.from(translationsData)
+          : const {},
     );
   }
 }

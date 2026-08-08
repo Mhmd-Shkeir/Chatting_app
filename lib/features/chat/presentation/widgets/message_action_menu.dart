@@ -5,10 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
 
-/// Quick-reaction choices shown at the top of the long-press menu. UI-only
-/// for now — tapping one just closes the sheet. Wiring these to Firestore
-/// (one reaction per user, tap again to remove/replace) is the next
-/// roadmap item and slots in here without touching this row's layout.
+/// Quick-reaction choices shown at the top of the long-press menu. Adding
+/// another emoji later is just extending this list — the row, the
+/// highlight-if-mine styling, and the Firestore toggle logic all key off
+/// it generically.
 const quickReactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 /// One row in the action list below the reaction row. [onTap] left null
@@ -33,8 +33,10 @@ class MessageActionItem {
 Future<void> showMessageActionMenu(
   BuildContext context, {
   required WidgetRef ref,
+  required String conversationId,
   required Message message,
   required bool isMine,
+  required String currentUserId,
 }) {
   final actions = <MessageActionItem>[
     MessageActionItem(
@@ -56,17 +58,43 @@ Future<void> showMessageActionMenu(
     const MessageActionItem(icon: Icons.info_outline, label: 'Message info'),
   ];
 
+  final myReaction = message.reactions[currentUserId];
+
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    builder: (_) => _MessageActionSheet(actions: actions),
+    builder: (_) => _MessageActionSheet(
+      actions: actions,
+      myReaction: myReaction,
+      onSelectReaction: (emoji) {
+        final chatRepository = ref.read(chatRepositoryProvider);
+        if (emoji == myReaction) {
+          chatRepository.removeReaction(
+            conversationId: conversationId,
+            messageId: message.id,
+          );
+        } else {
+          chatRepository.setReaction(
+            conversationId: conversationId,
+            messageId: message.id,
+            emoji: emoji,
+          );
+        }
+      },
+    ),
   );
 }
 
 class _MessageActionSheet extends StatelessWidget {
-  const _MessageActionSheet({required this.actions});
+  const _MessageActionSheet({
+    required this.actions,
+    required this.myReaction,
+    required this.onSelectReaction,
+  });
 
   final List<MessageActionItem> actions;
+  final String? myReaction;
+  final ValueChanged<String> onSelectReaction;
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +108,14 @@ class _MessageActionSheet extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 for (final emoji in quickReactionEmojis)
-                  _ReactionButton(emoji: emoji),
+                  _ReactionButton(
+                    emoji: emoji,
+                    selected: emoji == myReaction,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onSelectReaction(emoji);
+                    },
+                  ),
               ],
             ),
           ),
@@ -104,16 +139,28 @@ class _MessageActionSheet extends StatelessWidget {
 }
 
 class _ReactionButton extends StatelessWidget {
-  const _ReactionButton({required this.emoji});
+  const _ReactionButton({
+    required this.emoji,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String emoji;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(24),
-      onTap: () => Navigator.of(context).pop(),
-      child: Padding(
+      onTap: onTap,
+      child: Container(
+        decoration: selected
+            ? BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              )
+            : null,
         padding: const EdgeInsets.all(6),
         child: Text(emoji, style: const TextStyle(fontSize: 26)),
       ),

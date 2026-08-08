@@ -22,6 +22,7 @@ class MessageBubble extends ConsumerWidget {
     required this.otherUserName,
     this.onReplyTap,
     this.isHighlighted = false,
+    this.translateToLanguageCode,
     super.key,
   });
 
@@ -34,11 +35,19 @@ class MessageBubble extends ConsumerWidget {
   final ValueChanged<String>? onReplyTap;
   final bool isHighlighted;
 
+  /// Non-null when the viewer's preferred language differs from the
+  /// sender's — see ChatScreen._translationTarget. Only applied to
+  /// messages that aren't mine; translating your own sent text back to
+  /// yourself makes no sense.
+  final String? translateToLanguageCode;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final isImage = message.type == MessageType.image;
     final replyTo = message.replyTo;
+    final needsTranslation =
+        !isMine && !isImage && translateToLanguageCode != null;
 
     final timestampColor =
         (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(
@@ -60,92 +69,124 @@ class MessageBubble extends ConsumerWidget {
       onLongPress: () => showMessageActionMenu(
         context,
         ref: ref,
+        conversationId: conversationId,
         message: message,
         isMine: isMine,
+        currentUserId: currentUserId,
       ),
       child: Align(
         alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          margin: const EdgeInsets.symmetric(vertical: 3),
-          padding: isImage
-              ? const EdgeInsets.all(4)
-              : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.75,
-          ),
-          decoration: BoxDecoration(
-            color: bubbleColor,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (replyTo != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: ReplyPreviewStrip(
-                    senderLabel: replyTo.senderId == currentUserId
-                        ? 'You'
-                        : otherUserName,
-                    preview: replyTo.previewLabel,
-                    onTap: onReplyTap == null
-                        ? null
-                        : () => onReplyTap!(replyTo.messageId),
-                    backgroundColor:
-                        (isMine ? colorScheme.onPrimary : colorScheme.onSurface)
-                            .withValues(alpha: 0.08),
-                    accentColor: isMine
-                        ? colorScheme.onPrimary
-                        : colorScheme.primary,
-                    foregroundColor: isMine
-                        ? colorScheme.onPrimary
-                        : colorScheme.onSurface,
+        child: Column(
+          crossAxisAlignment: isMine
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              margin: const EdgeInsets.symmetric(vertical: 3),
+              padding: isImage
+                  ? const EdgeInsets.all(4)
+                  : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.75,
+              ),
+              decoration: BoxDecoration(
+                color: bubbleColor,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (replyTo != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: ReplyPreviewStrip(
+                        senderLabel: replyTo.senderId == currentUserId
+                            ? 'You'
+                            : otherUserName,
+                        preview: replyTo.previewLabel,
+                        onTap: onReplyTap == null
+                            ? null
+                            : () => onReplyTap!(replyTo.messageId),
+                        backgroundColor:
+                            (isMine
+                                    ? colorScheme.onPrimary
+                                    : colorScheme.onSurface)
+                                .withValues(alpha: 0.08),
+                        accentColor: isMine
+                            ? colorScheme.onPrimary
+                            : colorScheme.primary,
+                        foregroundColor: isMine
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurface,
+                      ),
+                    ),
+                  if (isImage)
+                    _ImageContent(
+                      message: message,
+                      isMine: isMine,
+                      conversationId: conversationId,
+                      recipientId: recipientId,
+                      ref: ref,
+                    )
+                  else if (needsTranslation)
+                    _TranslatableText(
+                      message: message,
+                      conversationId: conversationId,
+                      targetLanguageCode: translateToLanguageCode!,
+                      textColor: colorScheme.onSurface,
+                    )
+                  else
+                    Text(
+                      message.text,
+                      style: TextStyle(
+                        color: isMine
+                            ? colorScheme.onPrimary
+                            : colorScheme.onSurface,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: isImage
+                        ? const EdgeInsets.only(right: 4)
+                        : EdgeInsets.zero,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (message.timestamp != null)
+                          Text(
+                            DateFormat.jm().format(message.timestamp!),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: timestampColor,
+                            ),
+                          ),
+                        if (isMine) ...[
+                          const SizedBox(width: 4),
+                          _ReadReceipt(
+                            status: message.status,
+                            onPrimary: colorScheme.onPrimary,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-              if (isImage)
-                _ImageContent(
-                  message: message,
-                  isMine: isMine,
-                  conversationId: conversationId,
-                  recipientId: recipientId,
-                  ref: ref,
-                )
-              else
-                Text(
-                  message.text,
-                  style: TextStyle(
-                    color: isMine
-                        ? colorScheme.onPrimary
-                        : colorScheme.onSurface,
-                  ),
-                ),
-              const SizedBox(height: 4),
+                ],
+              ),
+            ),
+            if (message.reactions.isNotEmpty)
               Padding(
-                padding: isImage
-                    ? const EdgeInsets.only(right: 4)
-                    : EdgeInsets.zero,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (message.timestamp != null)
-                      Text(
-                        DateFormat.jm().format(message.timestamp!),
-                        style: TextStyle(fontSize: 11, color: timestampColor),
-                      ),
-                    if (isMine) ...[
-                      const SizedBox(width: 4),
-                      _ReadReceipt(
-                        status: message.status,
-                        onPrimary: colorScheme.onPrimary,
-                      ),
-                    ],
-                  ],
+                padding: const EdgeInsets.only(top: 2),
+                child: _ReactionsRow(
+                  message: message,
+                  conversationId: conversationId,
+                  currentUserId: currentUserId,
+                  ref: ref,
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -302,5 +343,201 @@ class _ReadReceipt extends StatelessWidget {
         : onPrimary.withValues(alpha: 0.7);
 
     return Icon(icon, size: 14, color: color);
+  }
+}
+
+/// Grouped reaction pills shown under a bubble once it has at least one
+/// reaction — e.g. "👍 2". Tapping a pill toggles the current user's own
+/// reaction the same way the long-press menu's reaction row does.
+class _ReactionsRow extends StatelessWidget {
+  const _ReactionsRow({
+    required this.message,
+    required this.conversationId,
+    required this.currentUserId,
+    required this.ref,
+  });
+
+  final Message message;
+  final String conversationId;
+  final String currentUserId;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    final counts = <String, int>{};
+    for (final emoji in message.reactions.values) {
+      counts[emoji] = (counts[emoji] ?? 0) + 1;
+    }
+    final myReaction = message.reactions[currentUserId];
+
+    return Wrap(
+      spacing: 4,
+      children: [
+        for (final entry in counts.entries)
+          _ReactionBadge(
+            emoji: entry.key,
+            count: entry.value,
+            isMine: entry.key == myReaction,
+            onTap: () {
+              final chatRepository = ref.read(chatRepositoryProvider);
+              if (entry.key == myReaction) {
+                chatRepository.removeReaction(
+                  conversationId: conversationId,
+                  messageId: message.id,
+                );
+              } else {
+                chatRepository.setReaction(
+                  conversationId: conversationId,
+                  messageId: message.id,
+                  emoji: entry.key,
+                );
+              }
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _ReactionBadge extends StatelessWidget {
+  const _ReactionBadge({
+    required this.emoji,
+    required this.count,
+    required this.isMine,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final int count;
+  final bool isMine;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: isMine
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          border: isMine
+              ? Border.all(color: colorScheme.primary, width: 1)
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 13)),
+            if (count > 1) ...[
+              const SizedBox(width: 3),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Renders the original text plus a tappable "Translate" label — the
+/// translation is only fetched (via translationTriggerProvider) when the
+/// user actually taps it, never automatically. Opening a chat full of
+/// foreign-language messages must not fan out a translation call per
+/// message at once; Gemini's free tier only allows a handful of calls a
+/// day, so every one of them has to be a deliberate user action. Once
+/// translated, the live message stream swaps [message.translations] in and
+/// this flips to the same "Translated · Show original" toggle as before.
+class _TranslatableText extends ConsumerStatefulWidget {
+  const _TranslatableText({
+    required this.message,
+    required this.conversationId,
+    required this.targetLanguageCode,
+    required this.textColor,
+  });
+
+  final Message message;
+  final String conversationId;
+  final String targetLanguageCode;
+  final Color textColor;
+
+  @override
+  ConsumerState<_TranslatableText> createState() => _TranslatableTextState();
+}
+
+class _TranslatableTextState extends ConsumerState<_TranslatableText> {
+  bool _isTranslating = false;
+  bool _showOriginal = false;
+  bool _failed = false;
+
+  Future<void> _translate() async {
+    setState(() {
+      _isTranslating = true;
+      _failed = false;
+    });
+    try {
+      await ref.read(
+        translationTriggerProvider((
+          conversationId: widget.conversationId,
+          messageId: widget.message.id,
+          text: widget.message.text,
+          targetLanguageCode: widget.targetLanguageCode,
+        )).future,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _isTranslating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final translated = widget.message.translations[widget.targetLanguageCode];
+    final showingOriginal = translated == null || _showOriginal;
+    final labelStyle = TextStyle(
+      fontSize: 11,
+      fontStyle: FontStyle.italic,
+      color: widget.textColor.withValues(alpha: 0.7),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          showingOriginal ? widget.message.text : translated,
+          style: TextStyle(color: widget.textColor),
+        ),
+        if (translated != null)
+          GestureDetector(
+            onTap: () => setState(() => _showOriginal = !_showOriginal),
+            child: Text(
+              _showOriginal ? 'Show translation' : 'Translated · Show original',
+              style: labelStyle,
+            ),
+          )
+        else
+          GestureDetector(
+            onTap: _isTranslating ? null : _translate,
+            child: Text(
+              _failed
+                  ? 'Translation failed · Tap to retry'
+                  : (_isTranslating ? 'Translating…' : 'Translate'),
+              style: labelStyle,
+            ),
+          ),
+      ],
+    );
   }
 }

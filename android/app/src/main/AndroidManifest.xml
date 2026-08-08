@@ -2,6 +2,9 @@
     <!-- For image_picker's camera source (profile pictures). Gallery
          picking needs no extra permission on modern Android. -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Runtime prompt on Android 13+ for showing notifications; no-op on
+         older Android where notifications are allowed by default. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="chatting_app_flu"
         android:name="${applicationName}"
@@ -28,6 +31,16 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Matches the "messages" channel id used by LocalNotificationService,
+             so a notification-payload push that arrives while backgrounded
+             (auto-displayed by the FCM SDK, no app code involved) uses the
+             same channel/importance as one shown while foregrounded. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="messages" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

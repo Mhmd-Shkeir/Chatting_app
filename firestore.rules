@@ -45,9 +45,9 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
           && request.resource.data.senderId == request.auth.uid;
 
-        // Two distinct people are allowed to update a message after it's
-        // created, for two distinct reasons — message content itself (text,
-        // senderId, timestamp) stays immutable in both cases:
+        // Four distinct people/reasons are allowed to update a message
+        // after it's created — message content itself (text, senderId,
+        // timestamp) stays immutable in all four:
         //   1. The recipient (never the sender) marking read receipts —
         //      status only.
         //   2. The sender finishing their own pending image upload — status
@@ -58,6 +58,16 @@ service cloud.firestore {
         //      since resource.data.status is neither 'sending' nor 'failed'
         //      anymore, so a completed image message can't be rewritten
         //      later either.
+        //   3. Any participant (including the sender) setting/clearing
+        //      their own reaction — only the reactions map may change, and
+        //      within it only their own uid key, so nobody can touch
+        //      someone else's reaction.
+        //   4. Any participant caching a translation of the (immutable)
+        //      original text — only the translations map may change. This
+        //      is shared cache, not per-user state (a translation for a
+        //      given language is the same for everyone), so unlike
+        //      reactions there's no per-key ownership restriction — any
+        //      participant may add or overwrite any language's entry.
         allow update: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
           && (
@@ -66,6 +76,9 @@ service cloud.firestore {
             || (request.auth.uid == resource.data.senderId
               && resource.data.status in ['sending', 'failed']
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'imageUrl']))
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+              && request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid]))
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['translations'])
           );
       }
     }

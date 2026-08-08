@@ -153,6 +153,55 @@ class ChatRepository {
         .update({'status': 'sending'});
   }
 
+  /// Sets the caller's reaction on a message, replacing any previous one —
+  /// a dot-path update so it only ever touches the caller's own key in the
+  /// `reactions` map (see firestore.rules), never anyone else's.
+  Future<void> setReaction({
+    required String conversationId,
+    required String messageId,
+    required String emoji,
+  }) async {
+    final uid = _auth.currentUser!.uid;
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'reactions.$uid': emoji});
+  }
+
+  /// Clears the caller's reaction on a message, if any.
+  Future<void> removeReaction({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final uid = _auth.currentUser!.uid;
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'reactions.$uid': FieldValue.delete()});
+  }
+
+  /// Caches a translation of a message's original text under [languageCode]
+  /// — shared cache, not per-user state, so any participant may write it
+  /// (see firestore.rules); whoever views it first without a cached entry
+  /// for their language pays the translation cost, everyone after reuses it.
+  Future<void> setTranslation({
+    required String conversationId,
+    required String messageId,
+    required String languageCode,
+    required String translatedText,
+  }) async {
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .doc(messageId)
+        .update({'translations.$languageCode': translatedText});
+  }
+
   Future<void> markConversationRead(String conversationId) async {
     final myUid = _auth.currentUser!.uid;
     await _firestore.collection('conversations').doc(conversationId).update({
