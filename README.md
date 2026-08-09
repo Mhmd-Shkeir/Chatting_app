@@ -12,9 +12,12 @@ Want to try it without building it yourself? Grab the APK from this repo's [Rele
 
 ## Screenshots & Demo
 
-<img src="screenshots/home-groups-filter.png" alt="Home screen with the Groups filter" width="280" />
+<img src="screenshots/home-groups-filter.png" alt="Home screen with the Groups filter" width="280" /> <img src="screenshots/e2ee-ciphertext-firestore.png" alt="Firestore Console showing E2EE ciphertext, not plaintext" width="280" />
 
-[Demo walkthrough (video)](screenshots/demo-walkthrough.mp4)
+*The second screenshot is proof, not a mockup: a real message document in the Firebase Console, with `encrypted: true` and `text` holding ciphertext rather than readable content — see [Security: Basic E2EE MVP](#security-basic-e2ee-mvp).*
+
+- [Demo walkthrough (video)](screenshots/demo-walkthrough.mp4)
+- [Demo walkthrough — part 2 (video)](screenshots/demo-walkthrough-2.mp4)
 
 ## Features
 
