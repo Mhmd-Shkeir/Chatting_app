@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../notifications/data/repositories/notification_repository.dart';
 import '../../../profile/data/repositories/profile_repository.dart';
@@ -50,6 +51,21 @@ class AuthController extends AsyncNotifier<void> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() {
       return ref.read(authRepositoryProvider).login(email: email, password: password);
+    });
+  }
+
+  Future<void> signInWithGoogle() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      try {
+        await ref.read(authRepositoryProvider).signInWithGoogle();
+      } on GoogleSignInException catch (e) {
+        // The user backing out of the account picker isn't an error worth
+        // surfacing as one — swallow it back to idle instead of showing
+        // "Something went wrong" for a deliberate cancel.
+        if (e.code == GoogleSignInExceptionCode.canceled) return;
+        rethrow;
+      }
     });
   }
 

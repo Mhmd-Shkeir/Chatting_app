@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../../core/errors/username_taken_exception.dart';
 
@@ -101,7 +102,58 @@ class AuthRepository {
     );
   }
 
-  Future<void> logout() => _auth.signOut();
+  /// Google account picker -> Firebase credential exchange -> sign in.
+  /// GoogleSignIn.instance is initialized once at app startup (see
+  /// bootstrap.dart) with the serverClientId required for the ID token
+  /// Firebase can verify.
+  Future<void> signInWithGoogle() async {
+    final googleAccount = await GoogleSignIn.instance.authenticate();
+    final idToken = googleAccount.authentication.idToken;
+    if (idToken == null) {
+      throw Exception('Google sign-in did not return an ID token.');
+    }
+
+    final credential = GoogleAuthProvider.credential(idToken: idToken);
+    final userCredential = await _auth.signInWithCredential(credential);
+    final user = userCredential.user!;
+
+    final userRef = _firestore.collection('users').doc(user.uid);
+    final snapshot = await userRef.get();
+    if (!snapshot.exists) {
+      // First time signing in with this Google account — no username
+      // claimed yet (unlike register(), there's no transaction here since
+      // nothing in the `usernames` registry is being written). The existing
+      // router gate (profile.hasUsername) already sends any account without
+      // one to /choose-username, so that onboarding flow is reused as-is
+      // rather than needing a Google-specific version of it.
+      final displayName =
+          user.displayName ?? user.email?.split('@').first ?? 'New User';
+      await userRef.set({
+        'uid': user.uid,
+        'displayName': displayName,
+        'displayNameLower': displayName.toLowerCase(),
+        'username': null,
+        'usernameLower': null,
+        'email': user.email ?? '',
+        'photoUrl': user.photoURL,
+        'bio': null,
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastSeen': null,
+        'isOnline': false,
+        'fcmToken': null,
+      });
+    }
+  }
+
+  Future<void> logout() async {
+    await _auth.signOut();
+    // Best-effort, and harmless for an account that never used Google
+    // Sign-In — clears the cached Google session so a later sign-in shows
+    // the account picker again instead of silently reusing this one.
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
+  }
 
   /// Deletes the Firebase Auth account for [expectedUid] specifically —
   /// never just "whoever is currently signed in". A caller can end up

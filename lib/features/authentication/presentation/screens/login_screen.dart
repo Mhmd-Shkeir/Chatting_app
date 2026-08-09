@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/utils/firebase_error_mapper.dart';
 import '../../../../core/widgets/auth_text_field_decoration.dart';
 import '../../../../core/widgets/error_banner.dart';
+import '../../../../core/widgets/google_sign_in_button.dart';
 import '../../../../core/widgets/lumina_mark.dart';
 import '../../../../core/widgets/primary_loading_button.dart';
 import '../providers/auth_providers.dart';
@@ -170,6 +171,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 label: 'Log in',
                                 isLoading: authState.isLoading,
                                 onPressed: _submit,
+                              ),
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  Expanded(child: Divider(color: colorScheme.outlineVariant)),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                                    child: Text(
+                                      'or',
+                                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                                    ),
+                                  ),
+                                  Expanded(child: Divider(color: colorScheme.outlineVariant)),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              GoogleSignInButton(
+                                isLoading: authState.isLoading,
+                                onPressed: () => ref
+                                    .read(authControllerProvider.notifier)
+                                    .signInWithGoogle(),
                               ),
                             ],
                           ),

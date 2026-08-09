@@ -5,14 +5,35 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../notifications/presentation/providers/notification_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../data/models/message.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/translation_repository.dart';
+import '../../data/repositories/typing_repository.dart';
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   return ChatRepository();
+});
+
+final typingRepositoryProvider = Provider<TypingRepository>((ref) {
+  return TypingRepository();
+});
+
+/// Uid -> last-typed-at (server millis) for a conversation, excluding the
+/// caller — callers only ever care about *other* people typing, never
+/// themselves. Raw timestamps, not yet filtered for staleness — see
+/// ChatScreen, which re-evaluates "is this still fresh" on a periodic
+/// ticker rather than trusting an explicit clear to always arrive.
+final typingTimestampsProvider = StreamProvider.family<Map<String, int>, String>((ref, conversationId) {
+  final myUid = ref.watch(authStateChangesProvider).value?.uid;
+  return ref.watch(typingRepositoryProvider).watchTypingTimestamps(conversationId).map((timestamps) {
+    if (myUid == null) return timestamps;
+    final copy = Map<String, int>.from(timestamps);
+    copy.remove(myUid);
+    return copy;
+  });
 });
 
 final translationRepositoryProvider = Provider<TranslationRepository>((ref) {
@@ -164,6 +185,8 @@ class SendMessageController extends AsyncNotifier<void> {
     required List<String> recipientIds,
     required String text,
     ReplyPreview? replyTo,
+    List<String> mentions = const [],
+    bool encrypted = false,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
@@ -177,14 +200,19 @@ class SendMessageController extends AsyncNotifier<void> {
             recipientIds: recipientIds,
             text: trimmed,
             replyTo: replyTo,
+            mentions: mentions,
+            encrypted: encrypted,
           );
+      // Never send the plaintext (or, here, ciphertext blob) as the push
+      // preview for an encrypted message — a generic notification instead.
+      final preview = encrypted ? 'New encrypted message' : trimmed;
       for (final recipientId in recipientIds) {
         unawaited(
           _notifyRecipient(
             ref,
             recipientId: recipientId,
             conversationId: conversationId,
-            preview: trimmed,
+            preview: preview,
             type: 'text',
           ),
         );

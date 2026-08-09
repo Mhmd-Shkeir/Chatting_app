@@ -34,6 +34,8 @@ class ChatRepository {
     required List<String> recipientIds,
     required String text,
     ReplyPreview? replyTo,
+    List<String> mentions = const [],
+    bool encrypted = false,
   }) async {
     final senderId = _auth.currentUser!.uid;
     final conversationRef = _firestore
@@ -46,19 +48,31 @@ class ChatRepository {
     batch.set(messageRef, {
       'id': messageRef.id,
       'senderId': senderId,
+      // For an encrypted send, [text] is already the ciphertext blob (see
+      // E2eeRepository.encryptFor) — this repository never sees plaintext
+      // for an encrypted message, it just stores whatever it's given.
       'text': text,
       'status': 'sent',
       'timestamp': FieldValue.serverTimestamp(),
       if (replyTo != null) 'replyTo': replyTo.toMap(),
+      if (mentions.isNotEmpty) 'mentions': mentions,
+      if (encrypted) 'encrypted': true,
     });
 
     batch.update(conversationRef, {
-      'lastMessage': text,
+      // Never show raw ciphertext as the list preview — same reasoning as
+      // "Photo"/"Voice message" below for non-text types.
+      'lastMessage': encrypted ? '🔒 Encrypted message' : text,
       'lastMessageSenderId': senderId,
       'lastMessageTimestamp': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       for (final recipientId in recipientIds)
         'unreadCounts.$recipientId': FieldValue.increment(1),
+      // Denormalized onto the conversation doc so the home list can show a
+      // distinct @ badge without querying every conversation's messages
+      // subcollection just to render the list — cleared by
+      // markConversationRead.
+      for (final mentionedUid in mentions) 'mentionedUnread.$mentionedUid': true,
     });
 
     await batch.commit();
@@ -391,6 +405,7 @@ class ChatRepository {
     final myUid = _auth.currentUser!.uid;
     await _firestore.collection('conversations').doc(conversationId).update({
       'unreadCounts.$myUid': 0,
+      'mentionedUnread.$myUid': FieldValue.delete(),
     });
   }
 

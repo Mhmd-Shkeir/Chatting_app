@@ -11,6 +11,16 @@ class ConversationRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
+  /// Basic E2EE MVP toggle (1:1 conversations only) — either participant
+  /// can turn it on; once set, new outgoing text messages get encrypted.
+  /// No rules change needed (the conversation `update` rule is already
+  /// permissive to any current participant, same as clearedFor/mentionedUnread).
+  Future<void> setE2eeEnabled(String conversationId, bool enabled) {
+    return _firestore.collection('conversations').doc(conversationId).update({
+      'e2eeEnabled': enabled,
+    });
+  }
+
   Stream<List<Conversation>> streamConversations(String uid) {
     return _firestore
         .collection('conversations')

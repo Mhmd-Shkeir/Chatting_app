@@ -66,7 +66,13 @@ Future<void> showMessageActionMenu(
     MessageActionItem(
       icon: Icons.forward_outlined,
       label: 'Forward',
-      onTap: () => showForwardMessageSheet(context, ref: ref, message: message),
+      // Disabled for an E2EE MVP message — its ciphertext is only
+      // decryptable by this conversation's specific shared secret, so
+      // copying it verbatim into a different conversation would just be
+      // meaningless bytes there, not a real forward.
+      onTap: message.encrypted
+          ? null
+          : () => showForwardMessageSheet(context, ref: ref, message: message),
     ),
     if (message.type == MessageType.text)
       MessageActionItem(

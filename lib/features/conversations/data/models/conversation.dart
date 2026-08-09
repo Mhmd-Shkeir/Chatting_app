@@ -19,6 +19,8 @@ class Conversation {
     this.createdAt,
     this.updatedAt,
     this.clearedFor = const {},
+    this.mentionedUnread = const {},
+    this.e2eeEnabled = false,
   });
 
   final String id;
@@ -55,6 +57,20 @@ class Conversation {
   /// from that uid only; new activity after it makes the conversation
   /// reappear in their list normally.
   final Map<String, DateTime> clearedFor;
+
+  /// Uid -> true while that participant has an unread @mention in this
+  /// conversation — denormalized onto the conversation doc (set by
+  /// ChatRepository.sendMessage, cleared by markConversationRead) so the
+  /// home list can show a distinct badge without querying into every
+  /// conversation's messages subcollection just to render the list.
+  final Map<String, bool> mentionedUnread;
+
+  bool hasUnreadMentionFor(String uid) => mentionedUnread[uid] ?? false;
+
+  /// Basic E2EE MVP, 1:1 direct conversations only (see E2eeRepository) —
+  /// once either participant turns this on, new outgoing text messages in
+  /// this conversation get encrypted; historical messages are untouched.
+  final bool e2eeEnabled;
 
   /// Direct conversations only — meaningless for a group, which has no
   /// single "other" participant. Callers must branch on [isGroup] first.
@@ -104,6 +120,8 @@ class Conversation {
                 MapEntry(key as String, (value as Timestamp).toDate()),
           ) ??
           const {},
+      mentionedUnread: Map<String, bool>.from(data['mentionedUnread'] as Map? ?? const {}),
+      e2eeEnabled: data['e2eeEnabled'] as bool? ?? false,
     );
   }
 }

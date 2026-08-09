@@ -22,6 +22,8 @@ class Message {
     this.deletedForEveryone = false,
     this.deletedFor = const {},
     this.forwarded = false,
+    this.mentions = const [],
+    this.encrypted = false,
   });
 
   final String id;
@@ -75,6 +77,18 @@ class Message {
   /// original message/conversation).
   final bool forwarded;
 
+  /// Uids of participants explicitly @mentioned when this message was
+  /// composed (see ChatScreen's @-trigger autocomplete). Group chats only
+  /// — a direct conversation has nobody else to disambiguate. Immutable
+  /// once sent, same as the text itself.
+  final List<String> mentions;
+
+  /// True for a Basic E2EE MVP message (1:1 text only — see
+  /// E2eeRepository) — when set, [text] holds an encrypted blob, not
+  /// readable content, and callers must decrypt it before display (see
+  /// MessageBubble's _EncryptedText). Immutable once sent.
+  final bool encrypted;
+
   factory Message.fromFirestore(Map<String, dynamic> data, String id) {
     final replyToData = data['replyTo'];
     final reactionsData = data['reactions'];
@@ -104,6 +118,10 @@ class Message {
           ? Map<String, bool>.from(data['deletedFor'] as Map)
           : const {},
       forwarded: data['forwarded'] as bool? ?? false,
+      mentions: data['mentions'] is List
+          ? List<String>.from(data['mentions'] as List)
+          : const [],
+      encrypted: data['encrypted'] as bool? ?? false,
     );
   }
 }
@@ -155,7 +173,13 @@ class ReplyPreview {
     return ReplyPreview(
       messageId: message.id,
       senderId: message.senderId,
-      text: message.type == MessageType.image ? '' : message.text,
+      // An encrypted message's own `text` is ciphertext — never copy it
+      // into a reply preview (a plaintext-adjacent Firestore field the
+      // server can read). A fixed label instead; reply still links back to
+      // the right message, it just can't show a snippet.
+      text: message.encrypted
+          ? '🔒 Encrypted message'
+          : (message.type == MessageType.image ? '' : message.text),
       type: message.type,
     );
   }

@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "400283659453",
+    "firebase_url": "https://lumina-chat-app-2026-default-rtdb.firebaseio.com",
     "project_id": "lumina-chat-app-2026",
     "storage_bucket": "lumina-chat-app-2026.firebasestorage.app"
   },
@@ -12,7 +13,20 @@
           "package_name": "com.mohammadalishkeir.luminachat"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "400283659453-om09cmj9b2s61psmeoqhsh0pbt8p9m7a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mohammadalishkeir.luminachat",
+            "certificate_hash": "3e5e674ffdd8c3ddc9f10e20080e4ed5a5902a41"
+          }
+        },
+        {
+          "client_id": "400283659453-p2vjersu34rf7qcm0cp7ljhtup4j20lb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCnRNFo90h6CGQJZlCcNAUndK4jXKoibV4"
@@ -20,7 +34,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "400283659453-p2vjersu34rf7qcm0cp7ljhtup4j20lb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

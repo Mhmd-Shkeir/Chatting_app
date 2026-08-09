@@ -18,8 +18,22 @@ import '../../../conversations/presentation/providers/conversation_providers.dar
 import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
+import '../providers/e2ee_providers.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/reply_preview_strip.dart';
+
+/// Null when nobody else is typing. For a direct chat there's only ever one
+/// other person, so the label is always the same fixed string; a group
+/// names who, since which of several people could matter.
+String? _typingLabel(Set<String> typingUids, bool isGroup, String Function(String uid) nameFor) {
+  if (typingUids.isEmpty) return null;
+  if (!isGroup) return 'typing…';
+
+  final names = typingUids.map(nameFor).toList();
+  if (names.length == 1) return '${names[0]} is typing…';
+  if (names.length == 2) return '${names[0]} and ${names[1]} are typing…';
+  return '${names[0]} and ${names.length - 1} others are typing…';
+}
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({required this.conversationId, super.key});
@@ -48,6 +62,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Timer? _recordTimer;
   String? _recordingPath;
 
+  // How long to wait after the last keystroke before clearing the typing
+  // flag — matches the common "few seconds of silence" convention rather
+  // than clearing the instant the field is blurred.
+  static const _typingIdleDuration = Duration(seconds: 3);
+  Timer? _typingIdleTimer;
+  bool _isTypingActive = false;
+
+  // Independent of the writer's own idle timer above — this is the reader
+  // side's staleness check, a periodic rebuild so a typing entry ages out
+  // of the display within _typingStaleAfter even if the person who was
+  // typing never sent an explicit "stopped" write (app killed, connection
+  // dropped before onDisconnect could fire, an out-of-order write, etc.).
+  // A stream alone can't do this — it only emits on a data change, not
+  // merely because time passed.
+  static const _typingStaleAfter = Duration(seconds: 6);
+  Timer? _typingStalenessTicker;
+
+  // uid -> the display name inserted for it, so send-time can confirm the
+  // mention text wasn't deleted afterward (see _send) without tracking
+  // precise text ranges through every subsequent edit.
+  final Map<String, String> _draftMentions = {};
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +92,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           .read(chatRepositoryProvider)
           .markConversationRead(widget.conversationId),
     );
+    _typingStalenessTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -65,7 +104,77 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _highlightTimer?.cancel();
     _recordTimer?.cancel();
     _recorder.dispose();
+    _typingIdleTimer?.cancel();
+    _typingStalenessTicker?.cancel();
+    if (_isTypingActive) {
+      ref
+          .read(typingRepositoryProvider)
+          .setTyping(conversationId: widget.conversationId, isTyping: false);
+    }
     super.dispose();
+  }
+
+  void _onMessageTextChanged(String text) {
+    // Redraws the @-mention suggestion row, which reads cursor/text state
+    // straight off _textController in build() rather than its own field.
+    setState(() {});
+
+    final hasText = text.trim().isNotEmpty;
+    _typingIdleTimer?.cancel();
+    if (!hasText) {
+      _stopTyping();
+      return;
+    }
+    if (!_isTypingActive) {
+      _isTypingActive = true;
+      ref
+          .read(typingRepositoryProvider)
+          .setTyping(conversationId: widget.conversationId, isTyping: true);
+    }
+    _typingIdleTimer = Timer(_typingIdleDuration, _stopTyping);
+  }
+
+  void _stopTyping() {
+    _typingIdleTimer?.cancel();
+    if (!_isTypingActive) return;
+    _isTypingActive = false;
+    ref
+        .read(typingRepositoryProvider)
+        .setTyping(conversationId: widget.conversationId, isTyping: false);
+  }
+
+  /// The @-mention word currently being typed at the cursor, if any — null
+  /// whenever the cursor isn't sitting right after an unfinished "@word"
+  /// (no space/newline between the @ and the cursor).
+  String? _activeMentionQuery() {
+    final selection = _textController.selection;
+    if (!selection.isValid || !selection.isCollapsed) return null;
+    final cursor = selection.baseOffset;
+    if (cursor <= 0) return null;
+
+    final upToCursor = _textController.text.substring(0, cursor);
+    final atIndex = upToCursor.lastIndexOf('@');
+    if (atIndex == -1) return null;
+
+    final between = upToCursor.substring(atIndex + 1);
+    if (between.contains(' ') || between.contains('\n')) return null;
+    return between;
+  }
+
+  void _selectMention(String uid, String displayName) {
+    final text = _textController.text;
+    final cursor = _textController.selection.baseOffset;
+    final upToCursor = text.substring(0, cursor);
+    final atIndex = upToCursor.lastIndexOf('@');
+    if (atIndex == -1) return;
+
+    final newText = '${text.substring(0, atIndex)}@$displayName ${text.substring(cursor)}';
+    final newCursor = atIndex + displayName.length + 2;
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newCursor),
+    );
+    _draftMentions[uid] = displayName;
   }
 
   GlobalKey _keyFor(String messageId) =>
@@ -175,6 +284,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ? ref.watch(presenceStatusProvider(otherUid)).value
         : null;
     final otherUsername = otherProfile?.username;
+    // Basic E2EE MVP — 1:1 text only (see E2eeRepository's doc comment for
+    // exactly what this does and doesn't protect against).
+    final isE2eeEnabled = !isGroup && (conversation?.e2eeEnabled ?? false);
+    final typingTimestamps =
+        ref.watch(typingTimestampsProvider(widget.conversationId)).value ?? const {};
+    final typingStaleCutoff =
+        DateTime.now().millisecondsSinceEpoch - _typingStaleAfter.inMilliseconds;
+    final typingUids = typingTimestamps.entries
+        .where((entry) => entry.value >= typingStaleCutoff)
+        .map((entry) => entry.key)
+        .toSet();
+    final typingLabel = _typingLabel(typingUids, isGroup, nameFor);
+
+    // @mentions only make sense in a group — a direct chat has nobody else
+    // to disambiguate, the message is already unambiguously "to them".
+    final mentionQuery = isGroup ? _activeMentionQuery() : null;
+    final mentionCandidates = mentionQuery == null
+        ? const <MapEntry<String, String>>[]
+        : participantNames.entries
+            .where(
+              (entry) =>
+                  entry.key != myUid &&
+                  entry.value.toLowerCase().contains(mentionQuery.toLowerCase()),
+            )
+            .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -201,6 +335,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         Flexible(
                           child: Text(headerTitle, overflow: TextOverflow.ellipsis),
                         ),
+                        if (isE2eeEnabled) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.lock, size: 14, color: Theme.of(context).colorScheme.primary),
+                        ],
                         if (!isGroup &&
                             otherUsername != null &&
                             otherUsername.isNotEmpty) ...[
@@ -220,10 +358,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ],
                       ],
                     ),
-                    if (isGroup)
+                    if (typingLabel != null)
+                      Text(
+                        typingLabel,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                      )
+                    else if (isGroup)
                       Text(
                         '${conversation?.participants.length ?? 0} members',
                         style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else if (isE2eeEnabled)
+                      Text(
+                        '🔒 Encrypted',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                       )
                     else if (presence != null)
                       Text(
@@ -249,6 +402,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }
                   }),
                   child: const Text('Group info'),
+                ),
+              if (!isGroup)
+                PopupMenuItem<void>(
+                  onTap: () => Future(() {
+                    if (context.mounted) _toggleE2ee(context, isE2eeEnabled);
+                  }),
+                  child: Text(isE2eeEnabled ? 'Disable encryption' : 'Enable encryption'),
                 ),
               PopupMenuItem<void>(
                 // Deferred to a microtask so the popup route finishes
@@ -368,6 +528,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ref.read(replyingToProvider.notifier).clear(),
                       ),
                     ),
+                  if (mentionCandidates.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: mentionCandidates.length,
+                        itemBuilder: (context, index) {
+                          final candidate = mentionCandidates[index];
+                          return ListTile(
+                            dense: true,
+                            leading: UserAvatar(photoUrl: null, displayName: candidate.value, radius: 14),
+                            title: Text(candidate.value),
+                            onTap: () => _selectMention(candidate.key, candidate.value),
+                          );
+                        },
+                      ),
+                    ),
                   if (_isRecording)
                     _buildRecordingRow(context)
                   else
@@ -415,6 +598,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   setState(() => _showEmojiPicker = false);
                                 }
                               },
+                              onChanged: _onMessageTextChanged,
                               onSubmitted: (_) => _send(recipientIds),
                             ),
                           ),
@@ -517,9 +701,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _send(List<String> recipientIds) async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
+    _stopTyping();
+
+    final conversation = ref.read(conversationDetailProvider(widget.conversationId)).value;
+    final isE2eeEnabled = conversation != null && !conversation.isGroup && conversation.e2eeEnabled;
+    final otherUid = recipientIds.isNotEmpty ? recipientIds.first : null;
 
     final editing = _editingMessage;
     if (editing != null) {
+      var newText = text;
+      if (editing.encrypted && otherUid != null) {
+        try {
+          newText = await ref.read(e2eeRepositoryProvider).encryptFor(otherUid, text);
+        } catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text('Could not encrypt edit: $error')));
+          }
+          return;
+        }
+      }
       _textController.clear();
       setState(() => _editingMessage = null);
       await ref
@@ -527,13 +728,35 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           .editMessage(
             conversationId: widget.conversationId,
             messageId: editing.id,
-            newText: text,
+            newText: newText,
           );
       return;
     }
 
     if (recipientIds.isEmpty) return;
     final replyingTo = ref.read(replyingToProvider);
+    // Only keep mentions whose "@Name" text is still actually present —
+    // guards against a stale entry if the user inserted one and then
+    // deleted or edited it away before hitting send.
+    final mentions = _draftMentions.entries
+        .where((entry) => text.contains('@${entry.value}'))
+        .map((entry) => entry.key)
+        .toList();
+
+    var outgoingText = text;
+    if (isE2eeEnabled && otherUid != null) {
+      try {
+        outgoingText = await ref.read(e2eeRepositoryProvider).encryptFor(otherUid, text);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Could not send encrypted message: $error')));
+        }
+        return;
+      }
+    }
+
+    _draftMentions.clear();
     _textController.clear();
     ref.read(replyingToProvider.notifier).clear();
     await ref
@@ -541,10 +764,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         .send(
           conversationId: widget.conversationId,
           recipientIds: recipientIds,
-          text: text,
+          text: outgoingText,
           replyTo: replyingTo == null
               ? null
               : ReplyPreview.fromMessage(replyingTo),
+          mentions: mentions,
+          encrypted: isE2eeEnabled,
         );
   }
 
@@ -588,6 +813,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           .read(conversationRepositoryProvider)
           .clearChatForMe(widget.conversationId);
     }
+  }
+
+  /// Basic E2EE MVP toggle — turning it on doesn't itself require the
+  /// other person's key to already exist (their device publishes one the
+  /// next time they're signed in, via e2eeKeyTrackerProvider); the actual
+  /// encrypt call in _send surfaces a clear error if it's still missing
+  /// when a message is genuinely sent.
+  Future<void> _toggleE2ee(BuildContext context, bool currentlyEnabled) async {
+    if (!currentlyEnabled) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Enable encryption?'),
+          content: const Text(
+            'New messages you send from here on will be end-to-end '
+            'encrypted (text only). This is a basic demonstration, not a '
+            'full production-grade protocol — translation and rich push '
+            'previews are unavailable for encrypted messages. Existing '
+            'messages in this chat are not affected.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Enable'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    await ref
+        .read(conversationRepositoryProvider)
+        .setE2eeEnabled(widget.conversationId, !currentlyEnabled);
   }
 
   Future<void> _sendImage(List<String> recipientIds) async {

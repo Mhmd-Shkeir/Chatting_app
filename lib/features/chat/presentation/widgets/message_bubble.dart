@@ -9,10 +9,47 @@ import 'package:intl/intl.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../data/models/message.dart';
 import '../providers/chat_providers.dart';
+import '../providers/e2ee_providers.dart';
 import '../screens/image_viewer_screen.dart';
 import 'message_action_menu.dart';
 import 'reply_preview_strip.dart';
 import 'swipe_to_reply.dart';
+
+/// Splits [text] into spans, styling any "@Name" run that matches one of
+/// [participantNames] distinctly. Matched by the group's actual display
+/// names (not a bare "@\w+" regex) since mentions are only ever inserted
+/// via the compose bar's autocomplete (see ChatScreen._selectMention), so
+/// this only has to recognize real ones, not guess at free-typed "@" text
+/// that isn't a mention (e.g. an email address). Longest-name-first so
+/// "Ali" can't shadow a match against "Alice".
+List<TextSpan> _mentionSpans(
+  String text,
+  Iterable<String> participantNames, {
+  required TextStyle baseStyle,
+  required Color mentionColor,
+}) {
+  final names = participantNames.where((name) => name.isNotEmpty).toSet().toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  if (names.isEmpty) return [TextSpan(text: text, style: baseStyle)];
+
+  final pattern = RegExp('@(${names.map(RegExp.escape).join('|')})');
+  final spans = <TextSpan>[];
+  var lastEnd = 0;
+  for (final match in pattern.allMatches(text)) {
+    if (match.start > lastEnd) {
+      spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: baseStyle));
+    }
+    spans.add(TextSpan(
+      text: match.group(0),
+      style: baseStyle.copyWith(color: mentionColor, fontWeight: FontWeight.w700),
+    ));
+    lastEnd = match.end;
+  }
+  if (lastEnd < text.length) {
+    spans.add(TextSpan(text: text.substring(lastEnd), style: baseStyle));
+  }
+  return spans;
+}
 
 class MessageBubble extends ConsumerWidget {
   const MessageBubble({
@@ -64,11 +101,16 @@ class MessageBubble extends ConsumerWidget {
     final senderLanguageCode = (!isMine && myLanguageCode != null)
         ? ref.watch(userProfileProvider(message.senderId)).value?.preferredLanguage.code
         : null;
+    // Encrypted messages skip translation entirely — the server-side
+    // translate Worker only ever sees ciphertext, by design (see
+    // E2eeRepository), so there's nothing it could translate anyway.
     final needsTranslation = !isMine &&
         !isImage &&
         !isVoice &&
+        !message.encrypted &&
         senderLanguageCode != null &&
         senderLanguageCode != myLanguageCode;
+    final isMentioned = !isMine && message.mentions.contains(currentUserId);
 
     final timestampColor =
         (isMine ? colorScheme.onPrimary : colorScheme.onSurface).withValues(
@@ -169,6 +211,18 @@ class MessageBubble extends ConsumerWidget {
                         ),
                       ),
                     ),
+                  if (isMentioned && !message.deletedForEveryone)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'Mentioned you',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ),
                   if (message.deletedForEveryone)
                     Text(
                       isMine
@@ -198,20 +252,32 @@ class MessageBubble extends ConsumerWidget {
                           : colorScheme.onSurface,
                       ref: ref,
                     )
+                  else if (message.encrypted)
+                    _EncryptedText(
+                      message: message,
+                      otherUid: recipientIds.isNotEmpty ? recipientIds.first : null,
+                      textColor: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
+                    )
                   else if (needsTranslation)
                     _TranslatableText(
                       message: message,
                       conversationId: conversationId,
                       targetLanguageCode: myLanguageCode!,
                       textColor: colorScheme.onSurface,
+                      mentionNames: participantNames.values,
+                      mentionColor: colorScheme.primary,
                     )
                   else
-                    Text(
-                      message.text,
-                      style: TextStyle(
-                        color: isMine
-                            ? colorScheme.onPrimary
-                            : colorScheme.onSurface,
+                    Text.rich(
+                      TextSpan(
+                        children: _mentionSpans(
+                          message.text,
+                          participantNames.values,
+                          baseStyle: TextStyle(
+                            color: isMine ? colorScheme.onPrimary : colorScheme.onSurface,
+                          ),
+                          mentionColor: isMine ? colorScheme.onPrimary : colorScheme.primary,
+                        ),
                       ),
                     ),
                   const SizedBox(height: 4),
@@ -717,12 +783,24 @@ class _TranslatableText extends ConsumerStatefulWidget {
     required this.conversationId,
     required this.targetLanguageCode,
     required this.textColor,
+    required this.mentionNames,
+    required this.mentionColor,
   });
 
   final Message message;
   final String conversationId;
   final String targetLanguageCode;
   final Color textColor;
+
+  /// Same mention-highlighting inputs as the plain-text render path — a
+  /// translatable message is still the common case for an incoming
+  /// message (any time the sender's language differs from the viewer's),
+  /// so mentions need to render here too, not just in the untranslated
+  /// path. Only applied to the original text; a translated string is
+  /// Gemini's own wording and can't be reliably re-matched against a
+  /// participant's name.
+  final Iterable<String> mentionNames;
+  final Color mentionColor;
 
   @override
   ConsumerState<_TranslatableText> createState() => _TranslatableTextState();
@@ -768,10 +846,18 @@ class _TranslatableTextState extends ConsumerState<_TranslatableText> {
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          showingOriginal ? widget.message.text : translated,
-          style: TextStyle(color: widget.textColor),
-        ),
+        showingOriginal
+            ? Text.rich(
+                TextSpan(
+                  children: _mentionSpans(
+                    widget.message.text,
+                    widget.mentionNames,
+                    baseStyle: TextStyle(color: widget.textColor),
+                    mentionColor: widget.mentionColor,
+                  ),
+                ),
+              )
+            : Text(translated, style: TextStyle(color: widget.textColor)),
         if (translated != null)
           GestureDetector(
             onTap: () => setState(() => _showOriginal = !_showOriginal),
@@ -791,6 +877,71 @@ class _TranslatableTextState extends ConsumerState<_TranslatableText> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Decrypts a Basic-E2EE-MVP message's ciphertext on-device for display —
+/// the plaintext lives only in this widget's local state, in memory, for
+/// as long as the bubble is on screen; it's never written anywhere. See
+/// E2eeRepository for the encrypt/decrypt implementation and its
+/// documented limitations.
+class _EncryptedText extends ConsumerStatefulWidget {
+  const _EncryptedText({required this.message, required this.otherUid, required this.textColor});
+
+  final Message message;
+  final String? otherUid;
+  final Color textColor;
+
+  @override
+  ConsumerState<_EncryptedText> createState() => _EncryptedTextState();
+}
+
+class _EncryptedTextState extends ConsumerState<_EncryptedText> {
+  String? _plaintext;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _decrypt();
+  }
+
+  Future<void> _decrypt() async {
+    final otherUid = widget.otherUid;
+    if (otherUid == null) {
+      setState(() => _error = 'Unable to decrypt message');
+      return;
+    }
+    try {
+      final plaintext =
+          await ref.read(e2eeRepositoryProvider).decryptFrom(otherUid, widget.message.text);
+      if (mounted) setState(() => _plaintext = plaintext);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Unable to decrypt message');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plaintext = _plaintext;
+    if (plaintext != null) {
+      return Text(plaintext, style: TextStyle(color: widget.textColor));
+    }
+    if (_error != null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 14, color: widget.textColor.withValues(alpha: 0.7)),
+          const SizedBox(width: 6),
+          Text(_error!, style: TextStyle(color: widget.textColor.withValues(alpha: 0.7), fontStyle: FontStyle.italic)),
+        ],
+      );
+    }
+    return SizedBox(
+      height: 16,
+      width: 16,
+      child: CircularProgressIndicator(strokeWidth: 2, color: widget.textColor.withValues(alpha: 0.7)),
     );
   }
 }

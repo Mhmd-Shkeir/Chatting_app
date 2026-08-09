@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/theme/brand_colors.dart';
 import '../../../../core/utils/conversation_timestamp_formatter.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/presence_providers.dart';
@@ -50,6 +51,7 @@ class ConversationTile extends ConsumerWidget {
     final username = isGroup ? null : otherProfile?.username;
     final colorScheme = Theme.of(context).colorScheme;
     final hasUnread = unread > 0;
+    final hasMention = conversation.hasUnreadMentionFor(myUid);
 
     return ListTile(
       onTap: onTap,
@@ -121,23 +123,48 @@ class ConversationTile extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 6),
-          if (hasUnread)
-            Container(
-              constraints: const BoxConstraints(minWidth: 20),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: colorScheme.primary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                unread > 99 ? '99+' : '$unread',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onPrimary,
-                ),
-              ),
+          if (hasMention || hasUnread)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasMention)
+                  Container(
+                    margin: EdgeInsets.only(right: hasUnread ? 4 : 0),
+                    constraints: const BoxConstraints(minWidth: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: luminaGlow,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      '@',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF17142B),
+                      ),
+                    ),
+                  ),
+                if (hasUnread)
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onPrimary,
+                      ),
+                    ),
+                  ),
+              ],
             )
           else
             const SizedBox(height: 20),
