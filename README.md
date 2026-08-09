@@ -10,6 +10,12 @@ Feature-complete and tested end-to-end against the live Firebase project on both
 
 Want to try it without building it yourself? Grab the APK from this repo's [Releases](../../releases) page.
 
+## Screenshots & Demo
+
+<img src="screenshots/home-groups-filter.png" alt="Home screen with the Groups filter" width="280" />
+
+[Demo walkthrough (video)](screenshots/demo-walkthrough.mp4)
+
 ## Features
 
 **Messaging**
