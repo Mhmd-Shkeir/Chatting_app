@@ -4,9 +4,9 @@ A real-time Android messaging app built with Flutter and Firebase — direct mes
 
 **Why "Lumina"?** Communication is about bringing people closer and making conversations clearer — Lumina represents light, connection, and a bright space for people to communicate. The brand mark (an L built from a glowing bar and a spark) carries that through the launcher icon, splash screen, and in-app touches.
 
-## Status: Version 1.0
+## Status: Version 1.1
 
-Feature-complete and tested end-to-end against the live Firebase project on both an emulator and a physical device. See `reports/` for the full day-by-day build history, including bugs found and how they were fixed, or **[reports/FINAL-REPORT.md](reports/FINAL-REPORT.md)** for the single-document summary of every feature, the architecture, and known limitations.
+Feature-complete and tested end-to-end against the live Firebase project on both an emulator and a physical device. v1.0 was the original roadmap checkpoint; v1.1 adds Google Sign-In, typing indicators, @mentions, a Basic E2EE MVP, several group-chat fixes, and full offline messaging support on top of it. See `reports/` for the full day-by-day build history, including bugs found and how they were fixed, or **[reports/FINAL-REPORT.md](reports/FINAL-REPORT.md)** for the single-document summary of every feature, the architecture, and known limitations.
 
 Want to try it without building it yourself? Grab the APK from this repo's [Releases](../../releases) page.
 
@@ -29,11 +29,15 @@ Want to try it without building it yourself? Grab the APK from this repo's [Rele
 - Clear chat / delete chat (per-user, non-destructive to the other participant)
 - Typing indicators (self-healing — clears automatically if a "stopped typing" signal is never sent)
 - @mentions in group chats, with autocomplete, highlighted rendering, and a dedicated unread-mention badge on the conversation list
+- Full offline support: text/emoji/replies queue automatically and send in order once you're back online (no stuck send button), images/voice fail fast when offline and auto-retry on reconnect, and a small banner shows when you're offline
 
 **Groups**
 - Create a group with a name and photo, add members at creation or later
 - Remove a member (admin/creator only) and leave a group (any member, including the creator)
 - Sender names on incoming group messages; full feature parity with 1:1 chats
+- A message only shows as "read" (double blue tick) once *every* current member has actually read it, not just the first one
+- A dedicated Groups filter on the home screen always shows every group you're in
+- Clearing/deleting a group only clears your own view of it — the group itself, its name/avatar/members, and your ability to reopen and message it immediately are never affected
 
 **Security**
 - Basic end-to-end encryption for 1:1 text chats (opt-in, toggled per conversation) — see [Security: Basic E2EE MVP](#security-basic-e2ee-mvp) below for exactly what is and isn't protected
@@ -100,6 +104,7 @@ Each Cloudflare Worker's source lives in `cloudflare-worker/` and is deployed by
 - `reports/` — day-by-day build reports: what shipped, what broke, how it was fixed, verified against the real backend (see `reports/FINAL-REPORT.md` for the summary)
 - `prompts/` — AI prompts used during development
 - `cv/` — the developer's CV
+- `screenshots/` — app screenshots and demo videos (videos tracked via Git LFS)
 
 ## Running it
 
@@ -110,12 +115,12 @@ Each Cloudflare Worker's source lives in `cloudflare-worker/` and is deployed by
 
 ## Known Limitations
 
-- Sending an image with no network connectivity can leave it stuck "sending" instead of failing fast with a retry prompt — open, documented in `reports/day-04-05-status-report.md`.
 - The AI Assistant's conversation history is in-memory only for the current app session (not persisted).
 - Group chat rename, changing a group's photo after creation, and promoting a new admin are intentionally not built yet (the data model already has room for them).
 - The debug/release APK is currently signed with a debug key (no dedicated release keystore) — fine for sideloading to testers, not for a Play Store submission as-is.
 - E2EE is a Basic MVP — see [Security: Basic E2EE MVP](#security-basic-e2ee-mvp) for its specific, documented limitations (no forward secrecy, no key rotation, no multi-device support, no MITM protection).
+- A minor cosmetic lag was observed once after an offline-queued image synced (briefly showed a single checkmark instead of double before catching up) — functionally correct, not investigated further given time constraints.
 
 ## What's Next (under consideration, not started)
 
-Pinned messages, file/document sharing, voice calls, video calls, call history, voice message transcription, advanced group administration, and further AI Assistant capabilities. None of these are scoped or scheduled yet — v1.0's priority remains real-world testing and feedback before adding anything new.
+Pinned messages, file/document sharing, voice calls, video calls, call history, voice message transcription, advanced group administration, and further AI Assistant capabilities. None of these are scoped or scheduled yet — priority remains real-world testing and feedback before adding anything new.
