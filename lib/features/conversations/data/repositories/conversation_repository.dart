@@ -22,6 +22,35 @@ class ConversationRepository {
   }
 
   Stream<List<Conversation>> streamConversations(String uid) {
+    return _rawConversationsStream(uid).map(
+      (conversations) => conversations
+          // "Delete chat" from the list is really "clear it, but bring
+          // it back the moment there's new activity" — so a
+          // conversation stays hidden only while nothing has happened
+          // since the clear.
+          .where((conversation) {
+            final clearedAt = conversation.clearedFor[uid];
+            if (clearedAt == null) return true;
+            final lastActivity = conversation.lastMessageTimestamp;
+            return lastActivity != null && lastActivity.isAfter(clearedAt);
+          })
+          .toList(),
+    );
+  }
+
+  /// Every group [uid] currently belongs to — deliberately ignores
+  /// clearedFor, unlike [streamConversations]. Clearing/"deleting" a group
+  /// from the main list is meant to declutter it, not make the group
+  /// unreachable until someone else happens to send a new message; this is
+  /// the always-there "Groups" view a cleared group stays findable in
+  /// (mirrors the group-filter chip pattern from apps like WhatsApp).
+  Stream<List<Conversation>> streamAllGroups(String uid) {
+    return _rawConversationsStream(
+      uid,
+    ).map((conversations) => conversations.where((c) => c.isGroup).toList());
+  }
+
+  Stream<List<Conversation>> _rawConversationsStream(String uid) {
     return _firestore
         .collection('conversations')
         .where('participants', arrayContains: uid)
@@ -30,16 +59,6 @@ class ConversationRepository {
         .map(
           (snapshot) => snapshot.docs
               .map((doc) => Conversation.fromFirestore(doc.data(), doc.id))
-              // "Delete chat" from the list is really "clear it, but bring
-              // it back the moment there's new activity" — so a
-              // conversation stays hidden only while nothing has happened
-              // since the clear.
-              .where((conversation) {
-                final clearedAt = conversation.clearedFor[uid];
-                if (clearedAt == null) return true;
-                final lastActivity = conversation.lastMessageTimestamp;
-                return lastActivity != null && lastActivity.isAfter(clearedAt);
-              })
               .toList(),
         );
   }

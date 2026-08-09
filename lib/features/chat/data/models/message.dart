@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../../core/utils/firestore_timestamp_map.dart';
+
 enum MessageStatus { sending, sent, delivered, read, failed }
 
 enum MessageType { text, image, voice }
@@ -24,6 +26,7 @@ class Message {
     this.forwarded = false,
     this.mentions = const [],
     this.encrypted = false,
+    this.readBy = const {},
   });
 
   final String id;
@@ -89,6 +92,26 @@ class Message {
   /// MessageBubble's _EncryptedText). Immutable once sent.
   final bool encrypted;
 
+  /// Uid -> when that participant read this message — per-recipient,
+  /// unlike [status] (a single shared value). A direct conversation's
+  /// single recipient reading it is equivalent to the old status=='read'
+  /// behavior; a group message needs every other participant's key
+  /// present before it counts as fully read (see [isReadByAll]) — one
+  /// member opening the chat shouldn't turn the tick blue for everyone.
+  final Map<String, DateTime> readBy;
+
+  /// The "double blue tick" condition: every uid in [recipientIds] (every
+  /// other participant — one for a direct conversation, all members for a
+  /// group) has read this message. Falls back to the legacy shared
+  /// [status] for messages written before per-recipient tracking existed
+  /// (which never had readBy entries), so old direct-chat history doesn't
+  /// visually regress from blue back to gray.
+  bool isReadByAll(Iterable<String> recipientIds) {
+    final ids = recipientIds.toList();
+    if (ids.isEmpty) return false;
+    return ids.every(readBy.containsKey) || status == MessageStatus.read;
+  }
+
   factory Message.fromFirestore(Map<String, dynamic> data, String id) {
     final replyToData = data['replyTo'];
     final reactionsData = data['reactions'];
@@ -122,6 +145,7 @@ class Message {
           ? List<String>.from(data['mentions'] as List)
           : const [],
       encrypted: data['encrypted'] as bool? ?? false,
+      readBy: timestampMapFrom(data['readBy']),
     );
   }
 }

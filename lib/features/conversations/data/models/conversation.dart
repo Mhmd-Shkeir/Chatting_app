@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../../core/utils/firestore_timestamp_map.dart';
+
 enum ConversationType { direct, group }
 
 class Conversation {
@@ -115,11 +117,7 @@ class Conversation {
       unreadCounts: Map<String, int>.from(data['unreadCounts'] as Map? ?? const {}),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
-      clearedFor: (data['clearedFor'] as Map?)?.map(
-            (key, value) =>
-                MapEntry(key as String, (value as Timestamp).toDate()),
-          ) ??
-          const {},
+      clearedFor: timestampMapFrom(data['clearedFor']),
       mentionedUnread: Map<String, bool>.from(data['mentionedUnread'] as Map? ?? const {}),
       e2eeEnabled: data['e2eeEnabled'] as bool? ?? false,
     );

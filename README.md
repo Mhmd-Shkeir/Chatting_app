@@ -6,7 +6,9 @@ A real-time Android messaging app built with Flutter and Firebase — direct mes
 
 ## Status: Version 1.0
 
-Feature-complete and tested end-to-end against the live Firebase project on both an emulator and a physical device. See `reports/` for the full day-by-day build history, including bugs found and how they were fixed.
+Feature-complete and tested end-to-end against the live Firebase project on both an emulator and a physical device. See `reports/` for the full day-by-day build history, including bugs found and how they were fixed, or **[reports/FINAL-REPORT.md](reports/FINAL-REPORT.md)** for the single-document summary of every feature, the architecture, and known limitations.
+
+Want to try it without building it yourself? Grab the APK from this repo's [Releases](../../releases) page.
 
 ## Features
 
@@ -86,8 +88,9 @@ Each Cloudflare Worker's source lives in `cloudflare-worker/` and is deployed by
 - `android/` — native Android project (launcher icon, splash, manifest)
 - `cloudflare-worker/` — source for the three Workers described above
 - `docs/` — original product requirements, architecture decisions, data model, design system notes
-- `reports/` — day-by-day build reports: what shipped, what broke, how it was fixed, verified against the real backend
+- `reports/` — day-by-day build reports: what shipped, what broke, how it was fixed, verified against the real backend (see `reports/FINAL-REPORT.md` for the summary)
 - `prompts/` — AI prompts used during development
+- `cv/` — the developer's CV
 
 ## Running it
 

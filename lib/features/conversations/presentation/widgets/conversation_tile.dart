@@ -40,7 +40,9 @@ class ConversationTile extends ConsumerWidget {
     final isDeleted = otherProfile?.deleted ?? false;
     final name = isGroup
         ? conversation.displayNameFor(myUid)
-        : (isDeleted ? 'Deleted Account' : conversation.otherParticipantName(myUid));
+        : (isDeleted
+              ? 'Deleted Account'
+              : (otherProfile?.displayName ?? conversation.otherParticipantName(myUid)));
     // A deleted account must never show as online — gated ahead of the
     // watch itself, not just the rendering below, so a deleted account is
     // never presence-listened-to in the first place. Groups have no single

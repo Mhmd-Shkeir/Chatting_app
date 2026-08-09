@@ -49,11 +49,11 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
           && request.resource.data.senderId == request.auth.uid;
 
-        // Four distinct people/reasons are allowed to update a message
+        // Eight distinct people/reasons are allowed to update a message
         // after it's created — message content itself (text, senderId,
-        // timestamp) stays immutable in all four:
-        //   1. The recipient (never the sender) marking read receipts —
-        //      status only.
+        // timestamp) stays immutable in all of them:
+        //   1. Any recipient marking "delivered" — status only. (Per-user
+        //      "read" is now tracked separately, see 8.)
         //   2. The sender finishing their own pending image upload — status
         //      and imageUrl only, and only while the message is still
         //      mid-flight (status still 'sending' or a previously failed
@@ -79,6 +79,12 @@ service cloud.firestore {
         //      content and flags it; the doc itself stays (no hard delete).
         //   7. Any participant deleting a message "for me" — same
         //      per-key-ownership shape as reactions, but on deletedFor.
+        //   8. Any recipient marking a message as read *by them*
+        //      specifically — same per-key-ownership shape as reactions,
+        //      but on readBy. A group message only counts as fully "read"
+        //      once every member's own key is present (see
+        //      Message.isReadByAll), which one person's write here can
+        //      never fake for anyone else.
         allow update: if request.auth != null
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants
           && (
@@ -97,6 +103,8 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'imageUrl', 'audioUrl', 'deletedForEveryone']))
             || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedFor'])
               && request.resource.data.deletedFor.diff(resource.data.get('deletedFor', {})).affectedKeys().hasOnly([request.auth.uid]))
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+              && request.resource.data.readBy.diff(resource.data.get('readBy', {})).affectedKeys().hasOnly([request.auth.uid]))
           );
       }
     }

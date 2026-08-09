@@ -89,8 +89,15 @@ class MessageBubble extends ConsumerWidget {
   /// different languages from each other and from the viewer.
   final String? myLanguageCode;
 
-  String _nameFor(String uid) =>
-      uid == currentUserId ? 'You' : (participantNames[uid] ?? 'Unknown');
+  // Live per-uid lookup first (reflects a display-name edit immediately,
+  // same pattern as GroupInfoScreen's _MemberTile), falling back to the
+  // frozen participantNames snapshot only while that profile hasn't
+  // loaded yet.
+  String _nameFor(WidgetRef ref, String uid) {
+    if (uid == currentUserId) return 'You';
+    final liveName = ref.watch(userProfileProvider(uid)).value?.displayName;
+    return liveName ?? participantNames[uid] ?? 'Unknown';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -152,7 +159,7 @@ class MessageBubble extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 12, bottom: 2),
                 child: Text(
-                  _nameFor(message.senderId),
+                  _nameFor(ref, message.senderId),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
@@ -181,7 +188,7 @@ class MessageBubble extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: ReplyPreviewStrip(
-                        senderLabel: _nameFor(replyTo.senderId),
+                        senderLabel: _nameFor(ref, replyTo.senderId),
                         preview: replyTo.previewLabel,
                         onTap: onReplyTap == null
                             ? null
@@ -310,7 +317,8 @@ class MessageBubble extends ConsumerWidget {
                         if (isMine) ...[
                           const SizedBox(width: 4),
                           _ReadReceipt(
-                            status: message.status,
+                            message: message,
+                            recipientIds: recipientIds,
                             onPrimary: colorScheme.onPrimary,
                           ),
                         ],
@@ -633,13 +641,23 @@ class _VoiceContentState extends State<_VoiceContent> {
 }
 
 class _ReadReceipt extends StatelessWidget {
-  const _ReadReceipt({required this.status, required this.onPrimary});
+  const _ReadReceipt({
+    required this.message,
+    required this.recipientIds,
+    required this.onPrimary,
+  });
 
-  final MessageStatus status;
+  final Message message;
+
+  /// Every other participant — one uid for a direct conversation, all
+  /// group members for a group. The blue tick requires all of them to
+  /// have read it, not just the first (see Message.isReadByAll).
+  final List<String> recipientIds;
   final Color onPrimary;
 
   @override
   Widget build(BuildContext context) {
+    final status = message.status;
     if (status == MessageStatus.failed) {
       return Icon(
         Icons.error_outline,
@@ -655,7 +673,7 @@ class _ReadReceipt extends StatelessWidget {
       );
     }
 
-    final isRead = status == MessageStatus.read;
+    final isRead = message.isReadByAll(recipientIds);
     final icon = status == MessageStatus.sent ? Icons.done : Icons.done_all;
     final color = isRead
         ? Colors.lightBlueAccent

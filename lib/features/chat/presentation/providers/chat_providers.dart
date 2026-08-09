@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/connectivity_providers.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
 import '../../../notifications/presentation/providers/notification_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
@@ -285,6 +286,14 @@ class SendImageMessageController extends AsyncNotifier<void> {
     required File file,
   }) async {
     try {
+      // Skip straight to the failed state instead of waiting out the
+      // upload's own ~15s timeout when we already know there's no
+      // connection — same end state, much faster feedback. ChatScreen's
+      // isOnlineProvider listener retries this automatically once
+      // connectivity actually returns (see its comment).
+      if (!(ref.read(isOnlineProvider).value ?? true)) {
+        throw Exception('No internet connection');
+      }
       final url = await ref
           .read(imageKitRepositoryProvider)
           .uploadImage(
@@ -396,6 +405,10 @@ class SendVoiceMessageController extends AsyncNotifier<void> {
     required File file,
   }) async {
     try {
+      // See SendImageMessageController._upload's identical check.
+      if (!(ref.read(isOnlineProvider).value ?? true)) {
+        throw Exception('No internet connection');
+      }
       final url = await ref
           .read(imageKitRepositoryProvider)
           .uploadImage(

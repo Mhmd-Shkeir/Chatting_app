@@ -9,7 +9,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+import '../../../../core/providers/connectivity_providers.dart';
 import '../../../../core/utils/presence_formatter.dart';
+import '../../../../core/widgets/offline_banner.dart';
 import '../../../../core/widgets/photo_source_sheet.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../authentication/presentation/providers/auth_providers.dart';
@@ -264,17 +266,64 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final isDeleted = otherProfile?.deleted ?? false;
     final otherName = isDeleted
         ? 'Deleted Account'
-        : (myUid != null && conversation != null)
-        ? conversation.otherParticipantName(myUid)
-        : 'Chat';
+        : otherProfile?.displayName ??
+              ((myUid != null && conversation != null)
+                  ? conversation.otherParticipantName(myUid)
+                  : 'Chat');
     final participantNames = conversation?.participantNames ?? const <String, String>{};
-    String nameFor(String uid) =>
-        (myUid != null && uid == myUid) ? 'You' : (participantNames[uid] ?? 'Unknown');
+    // Live per-uid lookup first (reflects a display-name edit immediately,
+    // same pattern as GroupInfoScreen's _MemberTile), falling back to the
+    // frozen participantNames snapshot only while that profile hasn't
+    // loaded yet.
+    String nameFor(String uid) {
+      if (myUid != null && uid == myUid) return 'You';
+      final liveName = ref.watch(userProfileProvider(uid)).value?.displayName;
+      return liveName ?? participantNames[uid] ?? 'Unknown';
+    }
     final headerTitle = isGroup ? (conversation?.groupName ?? 'Group') : otherName;
 
     final messagesAsync = ref.watch(
       messagesStreamProvider(widget.conversationId),
     );
+
+    // Auto-retry once connectivity comes back: an image/voice message that
+    // failed (most likely because the upload was attempted while offline —
+    // see SendImageMessageController/_upload's fail-fast check) still has
+    // its local file cached for this session in pendingImageFilesProvider,
+    // so it can resend itself without the user having to notice and tap
+    // retry manually. Text messages need no equivalent here — Firestore's
+    // own offline write queue already resends those automatically, in
+    // order, once the connection returns.
+    ref.listen(isOnlineProvider, (previous, next) {
+      final cameOnline = previous?.value == false && next.value == true;
+      if (!cameOnline || myUid == null) return;
+      final pendingFiles = ref.read(pendingImageFilesProvider);
+      for (final message in messagesAsync.value ?? const <Message>[]) {
+        if (message.senderId != myUid || message.status != MessageStatus.failed) {
+          continue;
+        }
+        final file = pendingFiles.get(message.id);
+        if (file == null) continue;
+        if (message.type == MessageType.image) {
+          ref
+              .read(sendImageMessageControllerProvider.notifier)
+              .retry(
+                conversationId: widget.conversationId,
+                recipientIds: recipientIds,
+                messageId: message.id,
+              );
+        } else if (message.type == MessageType.voice) {
+          ref
+              .read(sendVoiceMessageControllerProvider.notifier)
+              .retry(
+                conversationId: widget.conversationId,
+                recipientIds: recipientIds,
+                messageId: message.id,
+              );
+        }
+      }
+    });
+
     final sendState = ref.watch(sendMessageControllerProvider);
     final replyingTo = ref.watch(replyingToProvider);
     // A deleted account must never be presence-listened-to at all, let
@@ -427,6 +476,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
+          const OfflineBanner(),
           Expanded(
             child: messagesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),

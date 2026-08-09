@@ -11,6 +11,23 @@ class ChatRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
+  /// `WriteBatch.commit()`'s Future can hang indefinitely while offline —
+  /// the batch's writes still land in the local cache immediately (a
+  /// message shows up right away via [streamMessages] with its fields
+  /// already set, since Firestore always applies pending writes to the
+  /// local cache synchronously), but the plugin's returned Future only
+  /// resolves once the batch actually reaches the server. Left un-timed-
+  /// out, this stuck Future is exactly what left the compose bar's send
+  /// button permanently disabled while offline (its AsyncNotifier state
+  /// never left AsyncLoading). Timing it out here doesn't cancel the
+  /// underlying write — it's already durably queued locally either way,
+  /// including across an app restart, and Firestore syncs it
+  /// automatically, in order, once connectivity returns — it just stops
+  /// making the caller (and therefore the UI) wait for that to happen.
+  Future<void> _commitBatch(WriteBatch batch) {
+    return batch.commit().timeout(const Duration(seconds: 5), onTimeout: () {});
+  }
+
   Stream<List<Message>> streamMessages(String conversationId) {
     return _firestore
         .collection('conversations')
@@ -75,7 +92,7 @@ class ChatRepository {
       for (final mentionedUid in mentions) 'mentionedUnread.$mentionedUid': true,
     });
 
-    await batch.commit();
+    await _commitBatch(batch);
   }
 
   /// Creates a pending image-message doc immediately (status: sending, no
@@ -135,7 +152,7 @@ class ChatRepository {
       for (final recipientId in recipientIds)
         'unreadCounts.$recipientId': FieldValue.increment(1),
     });
-    await batch.commit();
+    await _commitBatch(batch);
   }
 
   /// Mirrors [sendPendingImageMessage] for voice messages — a pending doc
@@ -193,7 +210,7 @@ class ChatRepository {
       for (final recipientId in recipientIds)
         'unreadCounts.$recipientId': FieldValue.increment(1),
     });
-    await batch.commit();
+    await _commitBatch(batch);
   }
 
   /// Mirrors [failImageMessage] for voice messages.
@@ -398,7 +415,7 @@ class ChatRepository {
       for (final targetRecipientId in targetRecipientIds)
         'unreadCounts.$targetRecipientId': FieldValue.increment(1),
     });
-    await batch.commit();
+    await _commitBatch(batch);
   }
 
   Future<void> markConversationRead(String conversationId) async {
@@ -428,18 +445,33 @@ class ChatRepository {
     );
   }
 
-  /// Upgrades sent/delivered -> read for every message not sent by [myUid].
+  /// Records [myUid] as having read every message not sent by them, via a
+  /// per-uid `readBy.$myUid` timestamp rather than the single shared
+  /// `status` field markMessagesDelivered uses — a group message must
+  /// track every member's own read separately (see Message.isReadByAll),
+  /// since one member opening the chat isn't "everyone has read this."
   /// Called only when the recipient actually opens this specific chat.
   Future<void> markMessagesRead({
     required String conversationId,
     required String myUid,
-  }) {
-    return _updateMessagesFrom(
-      conversationId: conversationId,
-      myUid: myUid,
-      matches: (status) => status != 'read',
-      newStatus: 'read',
+  }) async {
+    final snapshot = await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .collection('messages')
+        .where('senderId', isNotEqualTo: myUid)
+        .get();
+
+    final pending = snapshot.docs.where(
+      (doc) => !((doc.data()['readBy'] as Map?)?.containsKey(myUid) ?? false),
     );
+    if (pending.isEmpty) return;
+
+    final batch = _firestore.batch();
+    for (final doc in pending) {
+      batch.update(doc.reference, {'readBy.$myUid': FieldValue.serverTimestamp()});
+    }
+    await _commitBatch(batch);
   }
 
   Future<void> _updateMessagesFrom({
@@ -464,6 +496,6 @@ class ChatRepository {
     for (final doc in pending) {
       batch.update(doc.reference, {'status': newStatus});
     }
-    await batch.commit();
+    await _commitBatch(batch);
   }
 }

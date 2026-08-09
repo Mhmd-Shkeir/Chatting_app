@@ -14,6 +14,18 @@ final conversationsStreamProvider = StreamProvider<List<Conversation>>((ref) {
   return ref.watch(conversationRepositoryProvider).streamConversations(myUid);
 });
 
+/// Every group the current user belongs to, ignoring "cleared" state —
+/// backs the Groups filter chip on the home screen so a cleared/"deleted"
+/// group is always still reachable there. See
+/// ConversationRepository.streamAllGroups.
+final groupConversationsStreamProvider = StreamProvider<List<Conversation>>((
+  ref,
+) {
+  final myUid = ref.watch(authStateChangesProvider).value?.uid;
+  if (myUid == null) return const Stream.empty();
+  return ref.watch(conversationRepositoryProvider).streamAllGroups(myUid);
+});
+
 /// Direct-by-ID, never filtered by "cleared" state — see
 /// ConversationRepository.streamConversation for why this has to be a
 /// separate provider from [conversationsStreamProvider] rather than a
